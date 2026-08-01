@@ -168,27 +168,36 @@ func (h *Handler) DeleteTrain(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListTrainCoaches(w http.ResponseWriter, r *http.Request) {
 	trainID := chi.URLParam(r, "trainId")
 	rows, err := h.db.Query(r.Context(), `
-		SELECT id, coach_number, coach_type, total_seats, label, train_id
-		FROM coaches WHERE train_id = $1 ORDER BY coach_number ASC
+		SELECT 
+			c.id::text, c.coach_number, c.coach_type, COALESCE(c.coach_class, 'SECOND'), c.total_seats, COALESCE(c.label, ''), COALESCE(c.train_id::text, ''),
+			(
+				SELECT COUNT(DISTINCT s.id) 
+				FROM seats s 
+				JOIN bookings b ON b.seat_id = s.id 
+				WHERE s.coach_id = c.id AND b.status = 'CONFIRMED'
+			) AS booked_seats
+		FROM coaches c WHERE c.train_id = $1 ORDER BY c.coach_number ASC
 	`, trainID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to fetch coaches")
+		writeError(w, http.StatusInternalServerError, "Failed to fetch coaches: "+err.Error())
 		return
 	}
 	defer rows.Close()
 	type coach struct {
-		ID          string  `json:"id"`
-		CoachNumber int     `json:"coach_number"`
-		CoachType   string  `json:"coach_type"`
-		TotalSeats  int     `json:"total_seats"`
-		Label       string  `json:"label"`
-		TrainID     *string `json:"train_id"`
+		ID          string `json:"id"`
+		CoachNumber int    `json:"coach_number"`
+		CoachType   string `json:"coach_type"`
+		CoachClass  string `json:"coach_class"`
+		TotalSeats  int    `json:"total_seats"`
+		Label       string `json:"label"`
+		TrainID     string `json:"train_id"`
+		BookedSeats int    `json:"booked_seats"`
 	}
 	var coaches []coach
 	for rows.Next() {
 		var c coach
-		if err := rows.Scan(&c.ID, &c.CoachNumber, &c.CoachType, &c.TotalSeats, &c.Label, &c.TrainID); err != nil {
-			writeError(w, http.StatusInternalServerError, "Scan error")
+		if err := rows.Scan(&c.ID, &c.CoachNumber, &c.CoachType, &c.CoachClass, &c.TotalSeats, &c.Label, &c.TrainID, &c.BookedSeats); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
 		coaches = append(coaches, c)
@@ -204,12 +213,16 @@ func (h *Handler) AddCoachToTrain(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CoachNumber int    `json:"coach_number"`
 		CoachType   string `json:"coach_type"`
+		CoachClass  string `json:"coach_class"`
 		TotalSeats  int    `json:"total_seats"`
 		Label       string `json:"label"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
+	}
+	if req.CoachClass == "" {
+		req.CoachClass = "SECOND"
 	}
 
 	tx, err := h.db.Begin(r.Context())
@@ -221,11 +234,11 @@ func (h *Handler) AddCoachToTrain(w http.ResponseWriter, r *http.Request) {
 
 	var coachID string
 	err = tx.QueryRow(r.Context(), `
-		INSERT INTO coaches (train_id, coach_number, coach_type, total_seats, label)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id
-	`, trainID, req.CoachNumber, req.CoachType, req.TotalSeats, req.Label).Scan(&coachID)
+		INSERT INTO coaches (train_id, coach_number, coach_type, coach_class, total_seats, label)
+		VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+	`, trainID, req.CoachNumber, req.CoachType, req.CoachClass, req.TotalSeats, req.Label).Scan(&coachID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create coach")
+		writeError(w, http.StatusInternalServerError, "Failed to create coach: "+err.Error())
 		return
 	}
 
@@ -252,6 +265,7 @@ func (h *Handler) UpdateCoach(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		CoachNumber int    `json:"coach_number"`
 		CoachType   string `json:"coach_type"`
+		CoachClass  string `json:"coach_class"`
 		Label       string `json:"label"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -259,8 +273,8 @@ func (h *Handler) UpdateCoach(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err := h.db.Exec(r.Context(), `
-		UPDATE coaches SET coach_number = $1, coach_type = $2, label = $3 WHERE id = $4
-	`, req.CoachNumber, req.CoachType, req.Label, id)
+		UPDATE coaches SET coach_number = $1, coach_type = $2, coach_class = $3, label = $4 WHERE id = $5
+	`, req.CoachNumber, req.CoachType, req.CoachClass, req.Label, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to update coach")
 		return

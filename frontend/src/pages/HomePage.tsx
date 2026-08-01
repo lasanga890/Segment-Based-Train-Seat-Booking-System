@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, X, Route } from 'lucide-react'
+import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, Route, CheckCircle2 } from 'lucide-react'
 import { getStations, getSchedules, type Station, type Schedule } from '../services/api'
 
 export default function HomePage() {
@@ -10,7 +10,6 @@ export default function HomePage() {
   const [fromSeq, setFromSeq] = useState<string>('')
   const [toSeq, setToSeq] = useState<string>('')
   const [travelDate, setTravelDate] = useState<string>(() => {
-    // Default to today (local date in YYYY-MM-DD)
     return new Date().toISOString().split('T')[0]
   })
   const [loading, setLoading] = useState(true)
@@ -18,11 +17,9 @@ export default function HomePage() {
 
   // Schedules state
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string>('')
+  const [selectedClass, setSelectedClass] = useState<string>('SECOND')
   const [isSearchingTrains, setIsSearchingTrains] = useState(false)
-  
-  // Modal state
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedClass, setSelectedClass] = useState('SECOND')
 
   useEffect(() => {
     getStations()
@@ -31,29 +28,36 @@ export default function HomePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!fromSeq || !toSeq || !travelDate) return
+  // Auto-fetch available trains whenever From, To, and Date are set
+  useEffect(() => {
+    if (fromSeq && toSeq && travelDate) {
+      const fromNum = parseInt(fromSeq)
+      const toNum = parseInt(toSeq)
+      const direction = fromNum < toNum ? 'UP' : 'DOWN'
 
-    const fromNum = parseInt(fromSeq)
-    const toNum = parseInt(toSeq)
-    const direction = fromNum < toNum ? 'UP' : 'DOWN'
-
-    setIsSearchingTrains(true)
-    setError('')
-    try {
-      const fetchedSchedules = await getSchedules(travelDate, direction)
-      setSchedules(fetchedSchedules)
-      setIsModalOpen(true) // Open the modal after fetching
-    } catch (err) {
-      setError('Failed to fetch available trains for this date.')
-    } finally {
-      setIsSearchingTrains(false)
+      setIsSearchingTrains(true)
+      setError('')
+      getSchedules(travelDate, direction)
+        .then(fetchedSchedules => {
+          setSchedules(fetchedSchedules)
+          if (fetchedSchedules.length > 0) {
+            setSelectedScheduleId(fetchedSchedules[0].id)
+          } else {
+            setSelectedScheduleId('')
+          }
+        })
+        .catch(() => setError('Failed to fetch available trains for this date.'))
+        .finally(() => setIsSearchingTrains(false))
+    } else {
+      setSchedules([])
+      setSelectedScheduleId('')
     }
-  }
+  }, [fromSeq, toSeq, travelDate])
 
-  const handleSelectTrain = (scheduleId: string) => {
-    navigate(`/seats?schedule_id=${scheduleId}&coach_class=${selectedClass}&from=${fromSeq}&to=${toSeq}`)
+  const handleProceedBooking = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedScheduleId || !fromSeq || !toSeq) return
+    navigate(`/seats?schedule_id=${selectedScheduleId}&coach_class=${selectedClass}&from=${fromSeq}&to=${toSeq}`)
   }
 
   const validDestinations = stations.filter(s => s.sequence_order !== parseInt(fromSeq || '-1'))
@@ -131,7 +135,7 @@ export default function HomePage() {
                 </div>
               )}
 
-              <form onSubmit={handleSearch} className="space-y-5">
+              <form onSubmit={handleProceedBooking} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* From */}
                   <div>
@@ -220,14 +224,113 @@ export default function HomePage() {
                   </motion.div>
                 )}
 
+                {/* ── INLINE AVAILABLE TRAINS (Rendered under date field and above Proceed Booking) ── */}
+                {fromSeq && toSeq && travelDate && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-3 pt-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                        Available Trains on {travelDate}
+                      </label>
+                      {schedules.length > 0 && (
+                        <span className="text-xs text-brand-400 font-medium">{schedules.length} train(s) found</span>
+                      )}
+                    </div>
+
+                    {isSearchingTrains ? (
+                      <div className="p-4 bg-white/5 rounded-xl border border-white/10 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                        Searching train schedules...
+                      </div>
+                    ) : schedules.length > 0 ? (
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        {schedules.map(s => {
+                          const isSelected = selectedScheduleId === s.id
+                          return (
+                            <div
+                              key={s.id}
+                              onClick={() => setSelectedScheduleId(s.id)}
+                              className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                                isSelected
+                                  ? 'bg-brand-600/20 border-brand-500 ring-1 ring-brand-500 shadow-lg'
+                                  : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
+                              }`}
+                            >
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-100 text-sm">{s.train_name}</span>
+                                  <span className="text-[10px] bg-white/10 text-brand-300 px-1.5 py-0.5 rounded font-mono">
+                                    #{s.train_number}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                                  <span className="flex items-center gap-1 text-brand-300 font-semibold">
+                                    <Clock size={13} className="text-brand-400" />
+                                    {s.departure_time.slice(11, 16)}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-slate-300">
+                                    <Route size={13} className="text-slate-400" />
+                                    Main Route: {s.direction === 'UP' ? 'Colombo Fort ➔ Badulla' : 'Badulla ➔ Colombo Fort'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {isSelected && <CheckCircle2 size={18} className="text-brand-400" />}
+                                <input
+                                  type="radio"
+                                  name="inline_schedule_selection"
+                                  checked={isSelected}
+                                  onChange={() => setSelectedScheduleId(s.id)}
+                                  className="accent-brand-500 w-4 h-4 cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center text-xs text-amber-300">
+                        No active trains scheduled for this route on {travelDate}.
+                      </div>
+                    )}
+
+                    {/* Class Selector inline */}
+                    {schedules.length > 0 && (
+                      <div className="pt-2">
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Select Travel Class</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {['FIRST', 'SECOND', 'THIRD'].map(cls => (
+                            <button
+                              key={cls}
+                              type="button"
+                              onClick={() => setSelectedClass(cls)}
+                              className={`py-2 px-3 text-xs font-semibold rounded-lg border transition-all ${
+                                selectedClass === cls
+                                  ? 'bg-brand-600 text-white border-brand-400 shadow-md'
+                                  : 'bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10'
+                              }`}
+                            >
+                              {cls === 'FIRST' ? '1st Class' : cls === 'SECOND' ? '2nd Class' : '3rd Class'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Proceed Booking Button */}
                 <button
                   id="find-seats-btn"
                   type="submit"
-                  disabled={!fromSeq || !toSeq || isSearchingTrains}
-                  className="btn-primary w-full flex items-center justify-center gap-2"
+                  disabled={!fromSeq || !toSeq || !selectedScheduleId || isSearchingTrains}
+                  className="btn-primary w-full flex items-center justify-center gap-2 mt-4"
                 >
                   <Train size={18} />
-                  {isSearchingTrains ? 'Searching...' : 'Proceed Booking'}
+                  {isSearchingTrains ? 'Searching Trains...' : 'Proceed Booking'}
                 </button>
               </form>
             </motion.div>
@@ -270,76 +373,6 @@ export default function HomePage() {
           </div>
         </main>
       </div>
-
-      {/* ── Booking Modal ────────────────────────────────────────────── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
-          >
-            <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
-              <h3 className="text-xl font-bold text-white">Select Train & Class</h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto">
-              <label className="block text-sm font-medium text-slate-300 mb-2">Select Class</label>
-              <div className="relative mb-6">
-                <select
-                  className="select-field pr-10"
-                  value={selectedClass}
-                  onChange={e => setSelectedClass(e.target.value)}
-                >
-                  <option value="FIRST" className="text-slate-900 bg-white">First Class</option>
-                  <option value="SECOND" className="text-slate-900 bg-white">Second Class</option>
-                  <option value="THIRD" className="text-slate-900 bg-white">Third Class</option>
-                </select>
-                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-              
-              <h4 className="text-sm font-medium text-slate-300 mb-3">Available Trains</h4>
-              {schedules.length > 0 ? (
-                <div className="space-y-3">
-                  {schedules.map(schedule => (
-                    <div key={schedule.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-100 text-base">{schedule.train_name}</span>
-                          <span className="text-xs bg-brand-500/20 text-brand-300 px-2 py-0.5 rounded font-mono font-medium">#{schedule.train_number}</span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
-                          <span className="flex items-center gap-1 text-brand-300 font-semibold text-sm">
-                            <Clock size={14} className="text-brand-400" />
-                            {schedule.departure_time.slice(11, 16)}
-                          </span>
-                          <span className="flex items-center gap-1 text-slate-300">
-                            <Route size={13} className="text-slate-400" />
-                            Main Route: {schedule.direction === 'UP' ? 'Colombo Fort ➔ Badulla' : 'Badulla ➔ Colombo Fort'}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleSelectTrain(schedule.id)}
-                        className="btn-primary py-2 px-4 text-sm shrink-0"
-                      >
-                        View Seats
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center p-6 bg-white/5 rounded-xl border border-white/10 text-slate-400">
-                  No trains found for this route on the selected date.
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </div>
-      )}
     </div>
   )
 }

@@ -257,7 +257,7 @@ export interface AdminTrain {
 export interface AdminCoach {
   id: string; train_id: string; coach_number: number;
   coach_type: 'RESERVED'|'UNRESERVED'; coach_class: string;
-  total_seats: number; label: string;
+  total_seats: number; label: string; booked_seats?: number;
 }
 export const adminGetTrains = async (): Promise<AdminTrain[]> => {
   const res = await fetch(`${BASE_URL}/admin/trains`)
