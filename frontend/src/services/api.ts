@@ -257,7 +257,7 @@ export const adminCreateStation = async (data: Omit<AdminStation,'id'>) => {
   return res.json()
 }
 export const adminUpdateStation = async (id: string, data: Partial<AdminStation>) => {
-  const res = await fetch(`${BASE_URL}/admin/stations/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  const res = await fetch(`${BASE_URL}/admin/stations/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to update station')
   return res.json()
 }
