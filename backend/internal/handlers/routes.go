@@ -401,11 +401,11 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 
 	err = h.db.QueryRow(r.Context(), `
 		SELECT
-			b.id, b.passenger_name, b.passenger_email, b.seat_id,
+			b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''), b.seat_id::text,
 			s_start.name, s_end.name,
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
 			c.coach_number, s.seat_number,
-			b.created_at
+			b.created_at::text
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
@@ -494,10 +494,10 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 
 	query := fmt.Sprintf(`
 		SELECT
-			b.id, b.passenger_name, b.passenger_email,
+			b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''),
 			s_start.name, s_end.name,
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
-			c.coach_number, s.seat_number, b.created_at
+			c.coach_number, s.seat_number, b.created_at::text
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
