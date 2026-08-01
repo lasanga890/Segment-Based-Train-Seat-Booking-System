@@ -24,7 +24,7 @@ export default function HomePage() {
   useEffect(() => {
     getStations()
       .then(data => {
-        data.sort((a, b) => a.sequence_order - b.sequence_order)
+        data.sort((a, b) => a.distance_km - b.distance_km)
         setStations(data)
       })
       .catch(() => setError('Failed to load stations. Is the backend running?'))

@@ -70,7 +70,7 @@ func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
 	if allStr != "true" {
 		query += " WHERE is_active = true"
 	}
-	query += " ORDER BY sequence_order ASC"
+	query += " ORDER BY distance_km ASC"
 
 	rows, err := h.db.Query(r.Context(), query)
 	if err != nil {

@@ -37,7 +37,7 @@ export default function AdminStations() {
   const loadStations = async () => {
     try {
       const data = await getStations(true) as unknown as AdminStation[]
-      data.sort((a, b) => a.sequence_order - b.sequence_order)
+      data.sort((a, b) => a.distance_km - b.distance_km)
       setStations(data)
     } catch (e) {
       setToast({ msg: 'Failed to load stations', type: 'error' })
