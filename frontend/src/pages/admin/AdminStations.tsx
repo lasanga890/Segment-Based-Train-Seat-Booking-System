@@ -36,7 +36,7 @@ export default function AdminStations() {
 
   const loadStations = async () => {
     try {
-      const data = await getStations() as unknown as AdminStation[]
+      const data = await getStations(true) as unknown as AdminStation[]
       data.sort((a, b) => a.sequence_order - b.sequence_order)
       setStations(data)
     } catch (e) {

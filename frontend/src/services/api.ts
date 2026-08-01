@@ -14,6 +14,7 @@ export interface Station {
   code: string
   sequence_order: number
   distance_km: number
+  is_active?: boolean
 }
 
 export interface Schedule {
@@ -120,8 +121,8 @@ export const healthCheck = async () => {
 
 // ─── Stations ────────────────────────────────────────────────────────────────
 
-export const getStations = async (): Promise<Station[]> => {
-  const res = await fetch(`${BASE_URL}/stations`)
+export const getStations = async (all = false): Promise<Station[]> => {
+  const res = await fetch(`${BASE_URL}/stations${all ? '?all=true' : ''}`)
   if (!res.ok) throw new Error('Failed to fetch stations')
   return res.json()
 }

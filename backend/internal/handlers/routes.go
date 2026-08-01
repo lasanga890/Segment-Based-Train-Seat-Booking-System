@@ -59,12 +59,20 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 
 // ListStations returns all stations in sequence order.
 // GET /api/v1/stations
+// ListStations returns all stations in sequence order.
+// GET /api/v1/stations?all=true
 func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(), `
-		SELECT id, name, code, sequence_order, distance_km, created_at
+	allStr := r.URL.Query().Get("all")
+	query := `
+		SELECT id, name, code, sequence_order, distance_km, is_active, created_at
 		FROM stations
-		ORDER BY sequence_order ASC
-	`)
+	`
+	if allStr != "true" {
+		query += " WHERE is_active = true"
+	}
+	query += " ORDER BY sequence_order ASC"
+
+	rows, err := h.db.Query(r.Context(), query)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch stations")
 		return
@@ -77,14 +85,15 @@ func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
 		Code          string  `json:"code"`
 		SequenceOrder int     `json:"sequence_order"`
 		DistanceKM    float64 `json:"distance_km"`
+		IsActive      bool    `json:"is_active"`
 	}
 
 	var stations []stationRow
 	for rows.Next() {
 		var s stationRow
 		var createdAt interface{}
-		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.SequenceOrder, &s.DistanceKM, &createdAt); err != nil {
-			writeError(w, http.StatusInternalServerError, "Scan error")
+		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.SequenceOrder, &s.DistanceKM, &s.IsActive, &createdAt); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
 		stations = append(stations, s)
