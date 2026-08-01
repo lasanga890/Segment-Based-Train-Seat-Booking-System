@@ -62,7 +62,7 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uu
 		FROM seats s
 		JOIN coaches c ON c.id = s.coach_id
 		-- KEY FIX: only return coaches that belong to the schedule's train
-		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id
+		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id AND sch.is_active = true
 		WHERE c.coach_type = 'RESERVED' AND c.coach_class = $4
 		ORDER BY c.coach_number, s.seat_number
 	`
@@ -91,4 +91,3 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uu
 
 	return results, rows.Err()
 }
-

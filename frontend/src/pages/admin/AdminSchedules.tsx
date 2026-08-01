@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { adminListSchedules, adminCreateSchedule, adminUpdateSchedule, adminCancelSchedule, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
+import { adminListSchedules, adminCreateSchedule, adminCancelSchedule, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
 import { Plus, X, Search, Clock, Ban } from 'lucide-react'
 
 export default function AdminSchedules() {
@@ -43,7 +43,7 @@ export default function AdminSchedules() {
       const ts = await adminListTrains()
       setTrains(ts)
       if(ts.length > 0) setFTrain(ts[0].id)
-      setFDate('')
+      setFDate(new Date().toISOString().slice(0, 10))
       setFTime('')
       setModalOpen(true)
     } catch(e) { alert('Failed to load trains') }
@@ -55,7 +55,7 @@ export default function AdminSchedules() {
       await adminCreateSchedule({ train_id: fTrain, departure_date: fDate, departure_time: fTime })
       setModalOpen(false)
       loadSchedules()
-    } catch (e) { alert('Failed to create schedule') }
+    } catch (e) { alert(e instanceof Error ? e.message : 'Failed to create schedule') }
   }
 
   const handleCancel = async (id: string) => {
@@ -174,7 +174,7 @@ export default function AdminSchedules() {
                 <div className="flex gap-4">
                   <div className="flex-1">
                     <label className="block text-xs font-medium text-slate-400 mb-1">Date</label>
-                    <input required type="date" className="input-field" value={fDate} onChange={e => setFDate(e.target.value)} />
+                    <input required type="date" min={new Date().toISOString().slice(0, 10)} className="input-field" value={fDate} onChange={e => setFDate(e.target.value)} />
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs font-medium text-slate-400 mb-1">Departure Time</label>

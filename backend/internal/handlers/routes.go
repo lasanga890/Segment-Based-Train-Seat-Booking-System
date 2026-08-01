@@ -171,7 +171,7 @@ func (h *Handler) ListScheduleCoaches(w http.ResponseWriter, r *http.Request) {
 				  AND b2.status IN ('CONFIRMED', 'HOLD')
 			) AS booked_seats
 		FROM coaches c
-		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id
+		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id AND sch.is_active = true
 		WHERE c.coach_type = 'RESERVED'
 		ORDER BY c.coach_class, c.coach_number
 	`, scheduleID)
@@ -285,6 +285,10 @@ func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "Seat is not available for the requested segment")
 			return
 		}
+		if err == services.ErrScheduleUnavailable {
+			writeError(w, http.StatusConflict, "This schedule is no longer available for booking")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "Failed to hold seat")
 		return
 	}
@@ -356,6 +360,10 @@ func (h *Handler) HoldManySeats(w http.ResponseWriter, r *http.Request) {
 			}
 			if err == services.ErrSeatNotAvailable {
 				writeError(w, http.StatusConflict, "One or more seats are not available: "+seatIDStr)
+				return
+			}
+			if err == services.ErrScheduleUnavailable {
+				writeError(w, http.StatusConflict, "This schedule is no longer available for booking")
 				return
 			}
 			writeError(w, http.StatusInternalServerError, "Failed to hold seat: "+seatIDStr)
@@ -550,9 +558,9 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/admin/metrics
 func (h *Handler) GetAdminMetrics(w http.ResponseWriter, r *http.Request) {
 	type metrics struct {
-		TotalBookings    int     `json:"total_bookings"`
-		TotalRevenueLKR  float64 `json:"total_revenue_lkr"`
-		OccupancyRate    float64 `json:"occupancy_rate"`
+		TotalBookings   int     `json:"total_bookings"`
+		TotalRevenueLKR float64 `json:"total_revenue_lkr"`
+		OccupancyRate   float64 `json:"occupancy_rate"`
 	}
 
 	var m metrics
@@ -575,9 +583,9 @@ func (h *Handler) GetAdminMetrics(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 	statusFilter := r.URL.Query().Get("status")
 	searchFilter := r.URL.Query().Get("search")
-	dateFilter   := r.URL.Query().Get("date")
-	trainIDFilter:= r.URL.Query().Get("train_id")
-	classFilter  := r.URL.Query().Get("coach_class")
+	dateFilter := r.URL.Query().Get("date")
+	trainIDFilter := r.URL.Query().Get("train_id")
+	classFilter := r.URL.Query().Get("coach_class")
 
 	// Build dynamic WHERE clause
 	conditions := []string{"1=1"}
@@ -689,7 +697,6 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
 
 func (h *Handler) newFareService() *services.FareService {
 	return services.NewFareService(

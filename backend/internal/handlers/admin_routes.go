@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -294,6 +296,76 @@ func (h *Handler) RemoveCoach(w http.ResponseWriter, r *http.Request) {
 
 // ─── Schedule CRUD ────────────────────────────────────────────────────────────
 
+// ListAdminSchedules returns scheduled services, optionally narrowed to a date
+// range and/or direction. A schedule is one train departure on one calendar date.
+func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
+	dateFrom := r.URL.Query().Get("date_from")
+	dateTo := r.URL.Query().Get("date_to")
+	direction := r.URL.Query().Get("direction")
+
+	conditions := []string{"1=1"}
+	args := []interface{}{}
+	if dateFrom != "" {
+		if _, err := parseScheduleDate(dateFrom); err != nil {
+			writeError(w, http.StatusBadRequest, "date_from must be YYYY-MM-DD")
+			return
+		}
+		args = append(args, dateFrom)
+		conditions = append(conditions, fmt.Sprintf("s.departure_date >= $%d", len(args)))
+	}
+	if dateTo != "" {
+		if _, err := parseScheduleDate(dateTo); err != nil {
+			writeError(w, http.StatusBadRequest, "date_to must be YYYY-MM-DD")
+			return
+		}
+		args = append(args, dateTo)
+		conditions = append(conditions, fmt.Sprintf("s.departure_date <= $%d", len(args)))
+	}
+	if direction != "" {
+		if direction != "UP" && direction != "DOWN" {
+			writeError(w, http.StatusBadRequest, "direction must be UP or DOWN")
+			return
+		}
+		args = append(args, direction)
+		conditions = append(conditions, fmt.Sprintf("t.direction = $%d", len(args)))
+	}
+
+	query := `SELECT s.id::text, s.train_id::text, t.name, t.train_number, t.direction,
+		s.departure_date::text, s.departure_time::text, s.is_active
+		FROM schedules s JOIN trains t ON t.id = s.train_id
+		WHERE ` + joinConditions(conditions) + ` ORDER BY s.departure_date DESC, s.departure_time ASC`
+	rows, err := h.db.Query(r.Context(), query, args...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch schedules")
+		return
+	}
+	defer rows.Close()
+	type scheduleRow struct {
+		ID            string `json:"id"`
+		TrainID       string `json:"train_id"`
+		TrainName     string `json:"train_name"`
+		TrainNumber   string `json:"train_number"`
+		Direction     string `json:"direction"`
+		DepartureDate string `json:"departure_date"`
+		DepartureTime string `json:"departure_time"`
+		IsActive      bool   `json:"is_active"`
+	}
+	list := []scheduleRow{}
+	for rows.Next() {
+		var s scheduleRow
+		if err := rows.Scan(&s.ID, &s.TrainID, &s.TrainName, &s.TrainNumber, &s.Direction, &s.DepartureDate, &s.DepartureTime, &s.IsActive); err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to read schedules")
+			return
+		}
+		list = append(list, s)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to read schedules")
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TrainID       string `json:"train_id"`
@@ -304,13 +376,22 @@ func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+	date, err := parseScheduleDate(req.DepartureDate)
+	if err != nil || date.Before(todayUTC()) {
+		writeError(w, http.StatusBadRequest, "departure_date must be today or later in YYYY-MM-DD format")
+		return
+	}
+	if _, err := time.Parse("15:04", req.DepartureTime); err != nil {
+		writeError(w, http.StatusBadRequest, "departure_time must be HH:MM")
+		return
+	}
 	var id string
-	err := h.db.QueryRow(r.Context(), `
+	err = h.db.QueryRow(r.Context(), `
 		INSERT INTO schedules (train_id, departure_date, departure_time)
 		VALUES ($1, $2, $3) RETURNING id
 	`, req.TrainID, req.DepartureDate, req.DepartureTime).Scan(&id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create schedule")
+		writeError(w, http.StatusConflict, "Unable to create schedule. A schedule may already exist for this train and date.")
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
@@ -319,20 +400,41 @@ func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req struct {
+		DepartureDate string `json:"departure_date"`
 		DepartureTime string `json:"departure_time"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
+	if req.DepartureDate != "" {
+		if date, err := parseScheduleDate(req.DepartureDate); err != nil || date.Before(todayUTC()) {
+			writeError(w, http.StatusBadRequest, "departure_date must be today or later in YYYY-MM-DD format")
+			return
+		}
+	}
+	if _, err := time.Parse("15:04", req.DepartureTime); err != nil {
+		writeError(w, http.StatusBadRequest, "departure_time must be HH:MM")
+		return
+	}
 	_, err := h.db.Exec(r.Context(), `
-		UPDATE schedules SET departure_time = $1 WHERE id = $2
-	`, req.DepartureTime, id)
+		UPDATE schedules SET departure_date = COALESCE(NULLIF($1, ''), departure_date), departure_time = $2 WHERE id = $3
+	`, req.DepartureDate, req.DepartureTime, id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to update schedule")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
+}
+
+func parseScheduleDate(value string) (time.Time, error) { return time.Parse("2006-01-02", value) }
+func todayUTC() time.Time                               { return time.Now().UTC().Truncate(24 * time.Hour) }
+func joinConditions(conditions []string) string {
+	result := conditions[0]
+	for _, condition := range conditions[1:] {
+		result += " AND " + condition
+	}
+	return result
 }
 
 func (h *Handler) CancelSchedule(w http.ResponseWriter, r *http.Request) {
@@ -355,7 +457,7 @@ func (h *Handler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Try to clean up Redis hold if any
-	// Assuming hold keys are "hold:" + id or similar. 
+	// Assuming hold keys are "hold:" + id or similar.
 	// We'll just do best effort. Since hold keys in booking service typically use hold_id which we might not have,
 	// or we can just ignore.
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
@@ -488,7 +590,7 @@ func (h *Handler) GetRevenueAnalytics(w http.ResponseWriter, r *http.Request) {
 		FROM bookings
 		WHERE status = 'CONFIRMED'
 	`).Scan(&res.TotalRevenue, &res.FullRouteRevenue, &res.SegmentReuseRevenue, &res.FullRouteCount, &res.SegmentReuseCount)
-	
+
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch revenue analytics")
 		return

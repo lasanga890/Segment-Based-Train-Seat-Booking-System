@@ -74,6 +74,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 			r.Delete("/coaches/{id}", h.RemoveCoach)
 
 			// Schedules admin
+			r.Get("/schedules", h.ListAdminSchedules)
 			r.Post("/schedules", h.CreateSchedule)
 			r.Put("/schedules/{id}", h.UpdateSchedule)
 			r.Patch("/schedules/{id}/cancel", h.CancelSchedule)
@@ -135,4 +136,3 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		Services:  services,
 	})
 }
-

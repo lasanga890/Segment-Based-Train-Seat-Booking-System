@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getStations, adminCreateStation, adminUpdateStation, adminToggleStationStatus, Station, AdminStation } from '../../services/api'
+import { getStations, adminCreateStation, adminUpdateStation, adminToggleStationStatus, AdminStation } from '../../services/api'
 import { Edit2, Plus, X, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {

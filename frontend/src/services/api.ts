@@ -329,16 +329,16 @@ export interface AdminSchedule {
 }
 export const adminCreateSchedule = async (data: {train_id:string, departure_date:string, departure_time:string}) => {
   const res = await fetch(`${BASE_URL}/admin/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
-  if (!res.ok) throw new Error('Failed to create schedule')
+  if (!res.ok) throw new Error((await res.json()).error || 'Failed to create schedule')
   return res.json()
 }
-export const adminUpdateSchedule = async (id: string, data: {departure_time:string}) => {
-  const res = await fetch(`${BASE_URL}/admin/schedules/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+export const adminUpdateSchedule = async (id: string, data: {departure_date?:string, departure_time:string}) => {
+  const res = await fetch(`${BASE_URL}/admin/schedules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to update schedule')
   return res.json()
 }
 export const adminCancelSchedule = async (id: string) => {
-  const res = await fetch(`${BASE_URL}/admin/schedules/${id}/cancel`, { method: 'POST' })
+  const res = await fetch(`${BASE_URL}/admin/schedules/${id}/cancel`, { method: 'PATCH' })
   if (!res.ok) throw new Error('Failed to cancel schedule')
   return res.json()
 }

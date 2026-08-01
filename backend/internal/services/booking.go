@@ -20,6 +20,10 @@ var ErrSeatNotAvailable = errors.New("seat is not available for the requested se
 // ErrHoldNotFound is returned when a hold ID is invalid or expired.
 var ErrHoldNotFound = errors.New("hold not found or expired")
 
+// ErrScheduleUnavailable prevents bookings for cancelled schedules or seats that
+// do not belong to the train running that scheduled service.
+var ErrScheduleUnavailable = errors.New("schedule is unavailable for booking")
+
 // BookingService manages the full lifecycle of a booking.
 type BookingService struct {
 	db          *pgxpool.Pool
@@ -58,6 +62,9 @@ type HoldResult struct {
 // This is optimistic — the final CONFIRM step performs transactional DB locking.
 // If the hold key already exists (another user is checking out), returns ErrSeatNotAvailable.
 func (s *BookingService) HoldSeat(ctx context.Context, req HoldRequest) (*HoldResult, error) {
+	if err := s.validateActiveScheduleSeat(ctx, req.ScheduleID, req.SeatID); err != nil {
+		return nil, err
+	}
 	// First verify no confirmed booking already overlaps (fast read check)
 	occupied, err := s.isOccupied(ctx, req.ScheduleID, req.SeatID, req.FromSeq, req.ToSeq)
 	if err != nil {
@@ -147,6 +154,21 @@ func (s *BookingService) ConfirmBooking(ctx context.Context, req ConfirmRequest)
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+
+	var scheduleSeatValid bool
+	if err := tx.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM schedules sch
+			JOIN seats s ON s.id = $2
+			JOIN coaches c ON c.id = s.coach_id AND c.train_id = sch.train_id
+			WHERE sch.id = $1 AND sch.is_active = true
+		)
+	`, scheduleID, seatID).Scan(&scheduleSeatValid); err != nil {
+		return nil, fmt.Errorf("schedule validation failed: %w", err)
+	}
+	if !scheduleSeatValid {
+		return nil, ErrScheduleUnavailable
+	}
 
 	// 3. Lock the seat row — blocks any other concurrent goroutine/request
 	//    trying to book this same seat until our transaction completes.
@@ -253,6 +275,25 @@ func (s *BookingService) isOccupied(ctx context.Context, scheduleID, seatID uuid
 		  AND GREATEST(start_seq, $3) < LEAST(end_seq, $4)
 	`, seatID, scheduleID, fromSeq, toSeq).Scan(&count)
 	return count > 0, err
+}
+
+func (s *BookingService) validateActiveScheduleSeat(ctx context.Context, scheduleID, seatID uuid.UUID) error {
+	var valid bool
+	err := s.db.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM schedules sch
+			JOIN seats s ON s.id = $2
+			JOIN coaches c ON c.id = s.coach_id AND c.train_id = sch.train_id
+			WHERE sch.id = $1 AND sch.is_active = true
+		)
+	`, scheduleID, seatID).Scan(&valid)
+	if err != nil {
+		return fmt.Errorf("schedule validation failed: %w", err)
+	}
+	if !valid {
+		return ErrScheduleUnavailable
+	}
+	return nil
 }
 
 func (s *BookingService) getCoachTypeForSeat(ctx context.Context, seatID uuid.UUID) (models.CoachType, error) {
