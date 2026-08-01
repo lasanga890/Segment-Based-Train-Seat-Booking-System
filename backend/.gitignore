@@ -1,0 +1,11 @@
+# Binaries
+/server
+/bin/
+
+# Environment
+.env
+
+# Go test cache
+*.test
+*.out
+vendor/

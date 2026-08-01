@@ -1,0 +1,93 @@
+services:
+  # ─────────────────────────────────────────────────────────────────────────
+  # PostgreSQL 16 — Primary database
+  # ─────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: trainbooking_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-trainbooking}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-trainbooking_secret}
+      POSTGRES_DB: ${DB_NAME:-trainbooking_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-trainbooking} -d ${DB_NAME:-trainbooking_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trainbooking_net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Redis 7 — Temporary seat holds & caching
+  # ─────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: trainbooking_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trainbooking_net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Backend — Go API (multi-stage build → minimal alpine binary)
+  # ─────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trainbooking_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      REDIS_HOST: redis
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - trainbooking_net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Frontend — React + Vite (dev server in dev; nginx in prod)
+  # ─────────────────────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: trainbooking_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - trainbooking_net
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  trainbooking_net:
+    driver: bridge
