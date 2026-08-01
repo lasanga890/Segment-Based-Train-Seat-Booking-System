@@ -23,7 +23,10 @@ export default function HomePage() {
 
   useEffect(() => {
     getStations()
-      .then(setStations)
+      .then(data => {
+        data.sort((a, b) => a.sequence_order - b.sequence_order)
+        setStations(data)
+      })
       .catch(() => setError('Failed to load stations. Is the backend running?'))
       .finally(() => setLoading(false))
   }, [])

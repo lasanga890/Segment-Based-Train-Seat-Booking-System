@@ -27,7 +27,7 @@ func (h *Handler) CreateStation(w http.ResponseWriter, r *http.Request) {
 		VALUES ($1, $2, $3, $4) RETURNING id
 	`, req.Name, req.Code, req.SequenceOrder, req.DistanceKM).Scan(&id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to create station")
+		writeError(w, http.StatusInternalServerError, "Failed to create station: "+err.Error())
 		return
 	}
 

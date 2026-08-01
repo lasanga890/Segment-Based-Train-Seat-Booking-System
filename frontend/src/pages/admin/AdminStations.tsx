@@ -79,8 +79,8 @@ export default function AdminStations() {
       }
       setModalOpen(false)
       loadStations()
-    } catch (err) {
-      setToast({ msg: 'Action failed', type: 'error' })
+    } catch (err: any) {
+      setToast({ msg: err.message || 'Action failed', type: 'error' })
     }
   }
 
