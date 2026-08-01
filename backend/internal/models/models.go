@@ -56,11 +56,34 @@ type Seat struct {
 	CoachType   CoachType `json:"coach_type,omitempty" db:"coach_type"`
 }
 
+type Train struct {
+	ID          uuid.UUID `json:"id" db:"id"`
+	TrainNumber string    `json:"train_number" db:"train_number"`
+	Name        string    `json:"name" db:"name"`
+	Direction   string    `json:"direction" db:"direction"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+}
+
+type Schedule struct {
+	ID            uuid.UUID `json:"id" db:"id"`
+	TrainID       uuid.UUID `json:"train_id" db:"train_id"`
+	DepartureDate time.Time `json:"departure_date" db:"departure_date"`
+	DepartureTime time.Time `json:"departure_time" db:"departure_time"` // stored as time, mapped as string in JSON possibly
+	IsActive      bool      `json:"is_active" db:"is_active"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+
+	// Joined
+	TrainName   string `json:"train_name,omitempty" db:"train_name"`
+	TrainNumber string `json:"train_number,omitempty" db:"train_number"`
+	Direction   string `json:"direction,omitempty" db:"direction"`
+}
+
 // Booking is a confirmed or held reservation for a specific seat on a specific leg.
 // start_seq and end_seq are the station sequence indices forming the interval [start_seq, end_seq).
 // The segment overlap condition: GREATEST(b1.start_seq, b2.start_seq) < LEAST(b1.end_seq, b2.end_seq)
 type Booking struct {
 	ID               uuid.UUID     `json:"id" db:"id"`
+	ScheduleID       uuid.UUID     `json:"schedule_id" db:"schedule_id"`
 	PassengerName    string        `json:"passenger_name" db:"passenger_name"`
 	PassengerEmail   string        `json:"passenger_email" db:"passenger_email"`
 	SeatID           uuid.UUID     `json:"seat_id" db:"seat_id"`

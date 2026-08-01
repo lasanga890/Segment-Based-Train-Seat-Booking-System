@@ -26,24 +26,6 @@ func New(db *pgxpool.Pool, rdb *redis.Client, cfg *config.Config) *Handler {
 
 // RegisterRoutes mounts all API routes on the given router.
 func (h *Handler) RegisterRoutes(r *chi.Mux) {
-	// Custom CORS middleware for development
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if origin != "" {
-				w.Header().Set("Access-Control-Allow-Origin", origin)
-				w.Header().Set("Access-Control-Allow-Credentials", "true")
-			}
-			if r.Method == "OPTIONS" {
-				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	})
-
 	// Public API routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Health check
@@ -54,6 +36,9 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 
 		// Coaches
 		r.Get("/coaches", h.ListCoaches)
+
+		// Schedules
+		r.Get("/schedules", h.ListSchedules)
 
 		// Seat availability for a given leg
 		r.Get("/seats/availability", h.GetSeatAvailability)

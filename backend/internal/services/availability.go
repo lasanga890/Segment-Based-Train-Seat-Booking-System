@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/lasanga890/segment-train-booking/internal/models"
 )
@@ -26,7 +27,7 @@ func NewAvailabilityService(db *pgxpool.Pool) *AvailabilityService {
 //
 // The query uses a LEFT JOIN + CASE to determine overlap in a single DB round-trip.
 // Index on (seat_id, start_seq, end_seq) WHERE status IN ('HOLD','CONFIRMED') makes this fast.
-func (s *AvailabilityService) GetAvailability(ctx context.Context, fromSeq, toSeq int) ([]models.SeatAvailability, error) {
+func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uuid.UUID, fromSeq, toSeq int) ([]models.SeatAvailability, error) {
 	if fromSeq >= toSeq {
 		return nil, fmt.Errorf("fromSeq (%d) must be less than toSeq (%d)", fromSeq, toSeq)
 	}
@@ -42,13 +43,15 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, fromSeq, toSe
 				WHEN EXISTS (
 					SELECT 1 FROM bookings b
 					WHERE b.seat_id = s.id
+					  AND b.schedule_id = $1
 					  AND b.status IN ('CONFIRMED', 'HOLD')
-					  AND GREATEST(b.start_seq, $1) < LEAST(b.end_seq, $2)
+					  AND GREATEST(b.start_seq, $2) < LEAST(b.end_seq, $3)
 				) THEN 'occupied'
 				-- Any booking at all (on a different, non-overlapping leg)?
 				WHEN EXISTS (
 					SELECT 1 FROM bookings b
 					WHERE b.seat_id = s.id
+					  AND b.schedule_id = $1
 					  AND b.status IN ('CONFIRMED', 'HOLD')
 				) THEN 'partial'
 				-- No bookings whatsoever
@@ -60,7 +63,7 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, fromSeq, toSe
 		ORDER BY c.coach_number, s.seat_number
 	`
 
-	rows, err := s.db.Query(ctx, query, fromSeq, toSeq)
+	rows, err := s.db.Query(ctx, query, scheduleID, fromSeq, toSeq)
 	if err != nil {
 		return nil, fmt.Errorf("availability query failed: %w", err)
 	}

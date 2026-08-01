@@ -1,16 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Train, MapPin, ArrowRight, ChevronDown } from 'lucide-react'
-import { getStations, type Station } from '../services/api'
+import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock } from 'lucide-react'
+import { getStations, getSchedules, type Station, type Schedule } from '../services/api'
 
 export default function HomePage() {
   const navigate = useNavigate()
   const [stations, setStations] = useState<Station[]>([])
   const [fromSeq, setFromSeq] = useState<string>('')
   const [toSeq, setToSeq] = useState<string>('')
+  const [travelDate, setTravelDate] = useState<string>(() => {
+    // Default to today (local date in YYYY-MM-DD)
+    return new Date().toISOString().split('T')[0]
+  })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  // Schedules state
+  const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [isSearchingTrains, setIsSearchingTrains] = useState(false)
 
   useEffect(() => {
     getStations()
@@ -19,13 +27,31 @@ export default function HomePage() {
       .finally(() => setLoading(false))
   }, [])
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!fromSeq || !toSeq) return
-    navigate(`/seats?from=${fromSeq}&to=${toSeq}`)
+    if (!fromSeq || !toSeq || !travelDate) return
+
+    const fromNum = parseInt(fromSeq)
+    const toNum = parseInt(toSeq)
+    const direction = fromNum < toNum ? 'UP' : 'DOWN'
+
+    setIsSearchingTrains(true)
+    setError('')
+    try {
+      const fetchedSchedules = await getSchedules(travelDate, direction)
+      setSchedules(fetchedSchedules)
+    } catch (err) {
+      setError('Failed to fetch available trains for this date.')
+    } finally {
+      setIsSearchingTrains(false)
+    }
   }
 
-  const validDestinations = stations.filter(s => s.sequence_order > parseInt(fromSeq || '0'))
+  const handleSelectTrain = (scheduleId: string) => {
+    navigate(`/seats?schedule_id=${scheduleId}&from=${fromSeq}&to=${toSeq}`)
+  }
+
+  const validDestinations = stations.filter(s => s.sequence_order !== parseInt(fromSeq || '-1'))
   const selectedFrom = stations.find(s => s.sequence_order === parseInt(fromSeq))
   const selectedTo   = stations.find(s => s.sequence_order === parseInt(toSeq))
   const stationsCount = selectedFrom && selectedTo
@@ -115,9 +141,9 @@ export default function HomePage() {
                         onChange={e => { setFromSeq(e.target.value); setToSeq('') }}
                         disabled={loading}
                       >
-                        <option value="">Select origin...</option>
-                        {stations.slice(0, -1).map(s => (
-                          <option key={s.id} value={s.sequence_order}>
+                        <option value="" className="text-slate-900 bg-white">Select origin...</option>
+                        {stations.map(s => (
+                          <option key={s.id} value={s.sequence_order} className="text-slate-900 bg-white">
                             {s.name} ({s.code})
                           </option>
                         ))}
@@ -139,15 +165,34 @@ export default function HomePage() {
                         onChange={e => setToSeq(e.target.value)}
                         disabled={!fromSeq || loading}
                       >
-                        <option value="">Select destination...</option>
+                        <option value="" className="text-slate-900 bg-white">Select destination...</option>
                         {validDestinations.map(s => (
-                          <option key={s.id} value={s.sequence_order}>
+                          <option key={s.id} value={s.sequence_order} className="text-slate-900 bg-white">
                             {s.name} ({s.code})
                           </option>
                         ))}
                       </select>
                       <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     </div>
+                  </div>
+                </div>
+
+                {/* Date Picker */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">
+                    Travel Date
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="travel-date"
+                      type="date"
+                      className="input-field pr-10 [color-scheme:dark]"
+                      value={travelDate}
+                      min={new Date().toISOString().split('T')[0]}
+                      onChange={e => setTravelDate(e.target.value)}
+                      required
+                    />
+                    <Calendar size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                   </div>
                 </div>
 
@@ -173,14 +218,53 @@ export default function HomePage() {
                 <button
                   id="find-seats-btn"
                   type="submit"
-                  disabled={!fromSeq || !toSeq}
+                  disabled={!fromSeq || !toSeq || isSearchingTrains}
                   className="btn-primary w-full flex items-center justify-center gap-2"
                 >
                   <Train size={18} />
-                  Find Available Seats
+                  {isSearchingTrains ? 'Searching...' : 'Find Available Trains'}
                 </button>
               </form>
             </motion.div>
+
+            {/* ── Available Trains (Schedules) ─────────────────────────── */}
+            {schedules.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-8 space-y-4"
+              >
+                <h3 className="text-lg font-semibold text-white mb-4">Available Trains</h3>
+                {schedules.map(schedule => (
+                  <div key={schedule.id} className="glass-card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center border border-brand-500/30">
+                        <Train size={24} className="text-brand-400" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-100">{schedule.train_name}</h4>
+                        <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
+                          <span className="flex items-center gap-1"><Clock size={14}/> {schedule.departure_time.slice(11, 16)}</span>
+                          <span className="px-2 py-0.5 rounded-md bg-slate-800 text-xs font-medium">Train #{schedule.train_number}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleSelectTrain(schedule.id)}
+                      className="btn-primary py-2 px-6 w-full md:w-auto"
+                    >
+                      View Seats
+                    </button>
+                  </div>
+                ))}
+              </motion.div>
+            )}
+
+            {schedules.length === 0 && selectedFrom && selectedTo && !isSearchingTrains && (
+              <div className="mt-8 text-center text-slate-500">
+                <p>Click "Find Available Trains" to see schedules for {travelDate}</p>
+              </div>
+            )}
 
             {/* ── Route Strip ─────────────────────────────────────────── */}
             {!loading && stations.length > 0 && (

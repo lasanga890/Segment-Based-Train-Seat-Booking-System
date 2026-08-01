@@ -10,6 +10,7 @@ export default function SeatsPage() {
   const navigate = useNavigate()
   const fromParam = searchParams.get('from')
   const toParam = searchParams.get('to')
+  const scheduleId = searchParams.get('schedule_id')
   const fromSeq = fromParam !== null && fromParam !== '' ? parseInt(fromParam) : -1
   const toSeq   = toParam !== null && toParam !== '' ? parseInt(toParam) : -1
 
@@ -24,18 +25,17 @@ export default function SeatsPage() {
   const toStation   = stations.find(s => s.sequence_order === toSeq)
 
   useEffect(() => {
-    if (fromSeq === -1 || toSeq === -1 || fromSeq >= toSeq) {
+    if (fromSeq === -1 || toSeq === -1 || fromSeq === toSeq || !scheduleId) {
       navigate('/')
       return
     }
-    Promise.all([
-      getSeatAvailability(fromSeq, toSeq),
-      getStations(),
-    ]).then(([seatsData, stationsData]) => {
-      setSeats(seatsData)
-      setStations(stationsData)
-    }).finally(() => setLoading(false))
-  }, [fromSeq, toSeq])
+    getStations()
+      .then(setStations)
+      .then(() => getSeatAvailability(scheduleId, Math.min(fromSeq, toSeq), Math.max(fromSeq, toSeq)))
+      .then(setSeats)
+      .catch(console.error)
+      .finally(() => setLoading(false))
+  }, [fromSeq, toSeq, scheduleId, navigate])
 
   // Group seats by coach
   const seatsByCoach = seats.reduce<Record<number, SeatAvailability[]>>((acc, seat) => {
@@ -52,13 +52,18 @@ export default function SeatsPage() {
     setSelectedSeat(seat)
     setHoldLoading(true)
     try {
-      const result = await holdSeat({ seat_id: seat.seat_id, from_seq: fromSeq, to_seq: toSeq })
+      const result = await holdSeat({
+        schedule_id: scheduleId!,
+        seat_id: seat.seat_id,
+        from_seq: Math.min(fromSeq, toSeq),
+        to_seq: Math.max(fromSeq, toSeq)
+      })
       setHoldResult(result)
     } catch (err: any) {
       alert(err.message || 'Seat is no longer available')
       setSelectedSeat(null)
       // Refresh availability
-      getSeatAvailability(fromSeq, toSeq).then(setSeats)
+      getSeatAvailability(scheduleId!, Math.min(fromSeq, toSeq), Math.max(fromSeq, toSeq)).then(setSeats)
     } finally {
       setHoldLoading(false)
     }
@@ -88,6 +93,11 @@ export default function SeatsPage() {
               <span className="text-slate-400">{fromStation?.name}</span>
               <ArrowRight size={14} className="text-slate-600" />
               <span className="text-slate-400">{toStation?.name}</span>
+              {searchParams.get('date') && (
+                <span className="ml-2 text-xs bg-slate-800 text-brand-300 px-2.5 py-1 rounded-md border border-brand-500/20">
+                  📅 {searchParams.get('date')}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4 text-xs text-slate-500">

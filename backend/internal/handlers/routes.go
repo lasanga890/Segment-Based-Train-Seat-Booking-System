@@ -12,6 +12,48 @@ import (
 	"github.com/lasanga890/segment-train-booking/internal/services"
 )
 
+// ─── Schedules ────────────────────────────────────────────────────────────────
+
+// ListSchedules returns train schedules filtered by date and direction.
+// GET /api/v1/schedules?date=YYYY-MM-DD&direction=UP
+func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	dateStr := r.URL.Query().Get("date")
+	direction := r.URL.Query().Get("direction")
+
+	if dateStr == "" || direction == "" {
+		writeError(w, http.StatusBadRequest, "Query params 'date' and 'direction' are required")
+		return
+	}
+
+	rows, err := h.db.Query(r.Context(), `
+		SELECT s.id, s.train_id, s.departure_date, s.departure_time, s.is_active,
+		       t.name, t.train_number, t.direction
+		FROM schedules s
+		JOIN trains t ON t.id = s.train_id
+		WHERE s.departure_date = $1 AND t.direction = $2 AND s.is_active = true
+		ORDER BY s.departure_time ASC
+	`, dateStr, direction)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch schedules")
+		return
+	}
+	defer rows.Close()
+
+	var schedules []models.Schedule
+	for rows.Next() {
+		var s models.Schedule
+		if err := rows.Scan(&s.ID, &s.TrainID, &s.DepartureDate, &s.DepartureTime, &s.IsActive, &s.TrainName, &s.TrainNumber, &s.Direction); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error")
+			return
+		}
+		schedules = append(schedules, s)
+	}
+	if schedules == nil {
+		schedules = []models.Schedule{}
+	}
+	writeJSON(w, http.StatusOK, schedules)
+}
+
 // ─── Stations ─────────────────────────────────────────────────────────────────
 
 // ListStations returns all stations in sequence order.
@@ -98,8 +140,16 @@ func (h *Handler) ListCoaches(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
-	if fromStr == "" || toStr == "" {
-		writeError(w, http.StatusBadRequest, "Query params 'from' and 'to' are required (station sequence integers)")
+	scheduleIDStr := r.URL.Query().Get("schedule_id")
+
+	if fromStr == "" || toStr == "" || scheduleIDStr == "" {
+		writeError(w, http.StatusBadRequest, "Query params 'from', 'to', and 'schedule_id' are required")
+		return
+	}
+
+	scheduleID, err := uuid.Parse(scheduleIDStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid schedule_id")
 		return
 	}
 
@@ -115,7 +165,7 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svc := services.NewAvailabilityService(h.db)
-	seats, err := svc.GetAvailability(r.Context(), fromSeq, toSeq)
+	seats, err := svc.GetAvailability(r.Context(), scheduleID, fromSeq, toSeq)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch seat availability")
 		return
@@ -132,26 +182,29 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 // POST /api/v1/bookings/hold
 func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SeatID  string `json:"seat_id"`
-		FromSeq int    `json:"from_seq"`
-		ToSeq   int    `json:"to_seq"`
+		ScheduleID string `json:"schedule_id"`
+		SeatID     string `json:"seat_id"`
+		FromSeq    int    `json:"from_seq"`
+		ToSeq      int    `json:"to_seq"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
-	seatID, err := uuid.Parse(req.SeatID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "Invalid seat_id")
+	seatID, err1 := uuid.Parse(req.SeatID)
+	scheduleID, err2 := uuid.Parse(req.ScheduleID)
+	if err1 != nil || err2 != nil {
+		writeError(w, http.StatusBadRequest, "Invalid seat_id or schedule_id")
 		return
 	}
 
 	bookingSvc := services.NewBookingService(h.db, h.rdb, h.newFareService(), h.cfg.SeatHoldDurationMinutes)
 	result, err := bookingSvc.HoldSeat(r.Context(), services.HoldRequest{
-		SeatID:  seatID,
-		FromSeq: req.FromSeq,
-		ToSeq:   req.ToSeq,
+		ScheduleID: scheduleID,
+		SeatID:     seatID,
+		FromSeq:    req.FromSeq,
+		ToSeq:      req.ToSeq,
 	})
 	if err != nil {
 		if err == services.ErrSeatNotAvailable {

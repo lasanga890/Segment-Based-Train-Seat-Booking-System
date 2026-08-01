@@ -16,6 +16,17 @@ export interface Station {
   distance_km: number
 }
 
+export interface Schedule {
+  id: string
+  train_id: string
+  departure_date: string
+  departure_time: string
+  is_active: boolean
+  train_name: string
+  train_number: string
+  direction: 'UP' | 'DOWN'
+}
+
 export interface Coach {
   id: string
   coach_number: number
@@ -63,6 +74,7 @@ export interface Booking {
 }
 
 export interface HoldRequest {
+  schedule_id: string
   seat_id: string
   from_seq: number
   to_seq: number
@@ -72,6 +84,8 @@ export interface ConfirmRequest {
   hold_id: string
   passenger_name: string
   passenger_email: string
+  start_station_id: string
+  end_station_id: string
 }
 
 export interface AdminMetrics {
@@ -97,6 +111,14 @@ export const getStations = async (): Promise<Station[]> => {
   return res.json()
 }
 
+// ─── Schedules ───────────────────────────────────────────────────────────────
+
+export const getSchedules = async (date: string, direction: 'UP' | 'DOWN'): Promise<Schedule[]> => {
+  const res = await fetch(`${BASE_URL}/schedules?date=${date}&direction=${direction}`)
+  if (!res.ok) throw new Error('Failed to fetch schedules')
+  return res.json()
+}
+
 // ─── Coaches ─────────────────────────────────────────────────────────────────
 
 export const getCoaches = async (): Promise<Coach[]> => {
@@ -108,10 +130,11 @@ export const getCoaches = async (): Promise<Coach[]> => {
 // ─── Seat Availability ────────────────────────────────────────────────────────
 
 export const getSeatAvailability = async (
+  scheduleId: string,
   fromSeq: number,
   toSeq: number
 ): Promise<SeatAvailability[]> => {
-  const res = await fetch(`${BASE_URL}/seats/availability?from=${fromSeq}&to=${toSeq}`)
+  const res = await fetch(`${BASE_URL}/seats/availability?schedule_id=${scheduleId}&from=${fromSeq}&to=${toSeq}`)
   if (!res.ok) throw new Error('Failed to fetch seat availability')
   return res.json()
 }

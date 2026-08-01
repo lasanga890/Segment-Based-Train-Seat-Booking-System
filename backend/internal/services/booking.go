@@ -41,9 +41,10 @@ func NewBookingService(db *pgxpool.Pool, rdb *redis.Client, fareService *FareSer
 
 // HoldRequest is the input for placing a temporary seat hold.
 type HoldRequest struct {
-	SeatID   uuid.UUID
-	FromSeq  int
-	ToSeq    int
+	ScheduleID uuid.UUID
+	SeatID     uuid.UUID
+	FromSeq    int
+	ToSeq      int
 }
 
 // HoldResult is returned after successfully placing a hold.
@@ -58,7 +59,7 @@ type HoldResult struct {
 // If the hold key already exists (another user is checking out), returns ErrSeatNotAvailable.
 func (s *BookingService) HoldSeat(ctx context.Context, req HoldRequest) (*HoldResult, error) {
 	// First verify no confirmed booking already overlaps (fast read check)
-	occupied, err := s.isOccupied(ctx, req.SeatID, req.FromSeq, req.ToSeq)
+	occupied, err := s.isOccupied(ctx, req.ScheduleID, req.SeatID, req.FromSeq, req.ToSeq)
 	if err != nil {
 		return nil, fmt.Errorf("availability check failed: %w", err)
 	}
@@ -74,7 +75,7 @@ func (s *BookingService) HoldSeat(ctx context.Context, req HoldRequest) (*HoldRe
 
 	// Place Redis hold — SET NX ensures only one hold per seat+segment at a time
 	holdID := uuid.New().String()
-	holdKey := fmt.Sprintf("hold:seat:%s:seg:%d_%d", req.SeatID, req.FromSeq, req.ToSeq)
+	holdKey := fmt.Sprintf("hold:sched:%s:seat:%s:seg:%d_%d", req.ScheduleID, req.SeatID, req.FromSeq, req.ToSeq)
 	holdValue := holdID
 
 	set, err := s.rdb.SetNX(ctx, holdKey, holdValue, s.holdTTL).Result()
@@ -89,6 +90,7 @@ func (s *BookingService) HoldSeat(ctx context.Context, req HoldRequest) (*HoldRe
 	// Store hold metadata for confirmation step
 	metaKey := fmt.Sprintf("hold:meta:%s", holdID)
 	s.rdb.HSet(ctx, metaKey,
+		"schedule_id", req.ScheduleID.String(),
 		"seat_id", req.SeatID.String(),
 		"from_seq", req.FromSeq,
 		"to_seq", req.ToSeq,
@@ -132,6 +134,7 @@ func (s *BookingService) ConfirmBooking(ctx context.Context, req ConfirmRequest)
 		return nil, ErrHoldNotFound
 	}
 
+	scheduleID, _ := uuid.Parse(meta["schedule_id"])
 	seatID, _ := uuid.Parse(meta["seat_id"])
 	var fromSeq, toSeq int
 	fmt.Sscan(meta["from_seq"], &fromSeq)
@@ -163,9 +166,10 @@ func (s *BookingService) ConfirmBooking(ctx context.Context, req ConfirmRequest)
 	err = tx.QueryRow(ctx, `
 		SELECT COUNT(*) FROM bookings
 		WHERE seat_id   = $1
+		  AND schedule_id = $2
 		  AND status    IN ('CONFIRMED', 'HOLD')
-		  AND GREATEST(start_seq, $2) < LEAST(end_seq, $3)
-	`, seatID, fromSeq, toSeq).Scan(&conflictCount)
+		  AND GREATEST(start_seq, $3) < LEAST(end_seq, $4)
+	`, seatID, scheduleID, fromSeq, toSeq).Scan(&conflictCount)
 	if err != nil {
 		return nil, fmt.Errorf("overlap check failed: %w", err)
 	}
@@ -187,6 +191,7 @@ func (s *BookingService) ConfirmBooking(ctx context.Context, req ConfirmRequest)
 		PassengerName:  req.PassengerName,
 		PassengerEmail: req.PassengerEmail,
 		SeatID:         seatID,
+		ScheduleID:     scheduleID,
 		StartStationID: req.StartStationID,
 		EndStationID:   req.EndStationID,
 		StartSeq:       fromSeq,
@@ -197,13 +202,13 @@ func (s *BookingService) ConfirmBooking(ctx context.Context, req ConfirmRequest)
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO bookings
-			(id, passenger_name, passenger_email, seat_id,
+			(id, passenger_name, passenger_email, seat_id, schedule_id,
 			 start_station_id, end_station_id, start_seq, end_seq,
 			 fare_lkr, status)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'CONFIRMED')
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'CONFIRMED')
 		RETURNING created_at
 	`,
-		booking.ID, booking.PassengerName, booking.PassengerEmail, booking.SeatID,
+		booking.ID, booking.PassengerName, booking.PassengerEmail, booking.SeatID, booking.ScheduleID,
 		booking.StartStationID, booking.EndStationID,
 		booking.StartSeq, booking.EndSeq, booking.FareLKR,
 	).Scan(&booking.CreatedAt)
@@ -238,14 +243,15 @@ func (s *BookingService) ReleaseHold(ctx context.Context, holdID string) error {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-func (s *BookingService) isOccupied(ctx context.Context, seatID uuid.UUID, fromSeq, toSeq int) (bool, error) {
+func (s *BookingService) isOccupied(ctx context.Context, scheduleID, seatID uuid.UUID, fromSeq, toSeq int) (bool, error) {
 	var count int
 	err := s.db.QueryRow(ctx, `
 		SELECT COUNT(*) FROM bookings
 		WHERE seat_id = $1
+		  AND schedule_id = $2
 		  AND status IN ('CONFIRMED', 'HOLD')
-		  AND GREATEST(start_seq, $2) < LEAST(end_seq, $3)
-	`, seatID, fromSeq, toSeq).Scan(&count)
+		  AND GREATEST(start_seq, $3) < LEAST(end_seq, $4)
+	`, seatID, scheduleID, fromSeq, toSeq).Scan(&count)
 	return count > 0, err
 }
 
