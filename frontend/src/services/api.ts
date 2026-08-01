@@ -141,9 +141,25 @@ export const getSchedules = async (date: string, direction: 'UP' | 'DOWN'): Prom
 
 // ─── Coaches ─────────────────────────────────────────────────────────────────
 
+export interface ScheduleCoach {
+  id: string
+  coach_number: number
+  coach_type: 'RESERVED' | 'UNRESERVED'
+  coach_class: string
+  total_seats: number
+  label: string
+  booked_seats: number
+}
+
 export const getCoaches = async (): Promise<Coach[]> => {
   const res = await fetch(`${BASE_URL}/coaches`)
   if (!res.ok) throw new Error('Failed to fetch coaches')
+  return res.json()
+}
+
+export const getScheduleCoaches = async (scheduleId: string): Promise<ScheduleCoach[]> => {
+  const res = await fetch(`${BASE_URL}/schedules/${scheduleId}/coaches`)
+  if (!res.ok) throw new Error('Failed to fetch schedule coaches')
   return res.json()
 }
 

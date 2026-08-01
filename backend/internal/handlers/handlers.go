@@ -39,6 +39,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 
 		// Schedules
 		r.Get("/schedules", h.ListSchedules)
+		r.Get("/schedules/{scheduleId}/coaches", h.ListScheduleCoaches)
 
 		// Seat availability for a given leg
 		r.Get("/seats/availability", h.GetSeatAvailability)

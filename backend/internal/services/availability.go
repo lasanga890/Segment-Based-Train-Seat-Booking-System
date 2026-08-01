@@ -19,6 +19,7 @@ func NewAvailabilityService(db *pgxpool.Pool) *AvailabilityService {
 }
 
 // GetAvailability returns all seats in RESERVED coaches with their status for the leg [fromSeq, toSeq).
+// Only seats belonging to the train linked to the given schedule are returned.
 //
 // Status values:
 //   - "available": no confirmed/held booking overlaps this leg at all
@@ -60,6 +61,8 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uu
 			END AS status
 		FROM seats s
 		JOIN coaches c ON c.id = s.coach_id
+		-- KEY FIX: only return coaches that belong to the schedule's train
+		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id
 		WHERE c.coach_type = 'RESERVED' AND c.coach_class = $4
 		ORDER BY c.coach_number, s.seat_number
 	`
@@ -88,3 +91,4 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uu
 
 	return results, rows.Err()
 }
+

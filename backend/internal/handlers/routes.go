@@ -143,6 +143,69 @@ func (h *Handler) ListCoaches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, coaches)
 }
 
+// ListScheduleCoaches returns coaches for the train associated with a schedule.
+// Used by the user-side coach selection modal.
+// GET /api/v1/schedules/{scheduleId}/coaches
+func (h *Handler) ListScheduleCoaches(w http.ResponseWriter, r *http.Request) {
+	scheduleIDStr := chi.URLParam(r, "scheduleId")
+	scheduleID, err := uuid.Parse(scheduleIDStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid schedule_id")
+		return
+	}
+
+	rows, err := h.db.Query(r.Context(), `
+		SELECT
+			c.id::text,
+			c.coach_number,
+			c.coach_type,
+			COALESCE(c.coach_class, 'SECOND'),
+			c.total_seats,
+			COALESCE(c.label, ''),
+			(
+				SELECT COUNT(DISTINCT s2.id)
+				FROM seats s2
+				JOIN bookings b2 ON b2.seat_id = s2.id
+				WHERE s2.coach_id = c.id
+				  AND b2.schedule_id = $1
+				  AND b2.status IN ('CONFIRMED', 'HOLD')
+			) AS booked_seats
+		FROM coaches c
+		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id
+		WHERE c.coach_type = 'RESERVED'
+		ORDER BY c.coach_class, c.coach_number
+	`, scheduleID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch schedule coaches: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type coachRow struct {
+		ID          string `json:"id"`
+		CoachNumber int    `json:"coach_number"`
+		CoachType   string `json:"coach_type"`
+		CoachClass  string `json:"coach_class"`
+		TotalSeats  int    `json:"total_seats"`
+		Label       string `json:"label"`
+		BookedSeats int    `json:"booked_seats"`
+	}
+
+	var coaches []coachRow
+	for rows.Next() {
+		var c coachRow
+		if err := rows.Scan(&c.ID, &c.CoachNumber, &c.CoachType, &c.CoachClass, &c.TotalSeats, &c.Label, &c.BookedSeats); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+			return
+		}
+		coaches = append(coaches, c)
+	}
+	if coaches == nil {
+		coaches = []coachRow{}
+	}
+	writeJSON(w, http.StatusOK, coaches)
+}
+
 // ─── Seat Availability ────────────────────────────────────────────────────────
 
 // GetSeatAvailability returns all RESERVED seats with status for the requested leg.
