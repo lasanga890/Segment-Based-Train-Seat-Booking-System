@@ -453,11 +453,13 @@ func (h *Handler) GetAdminMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListAllBookings returns all bookings for admin view.
-// GET /api/v1/admin/bookings?status=CONFIRMED&search=john&date=2026-08-01
+// GET /api/v1/admin/bookings?status=CONFIRMED&search=john&date=2026-08-01&train_id=...&coach_class=SECOND
 func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 	statusFilter := r.URL.Query().Get("status")
 	searchFilter := r.URL.Query().Get("search")
 	dateFilter   := r.URL.Query().Get("date")
+	trainIDFilter:= r.URL.Query().Get("train_id")
+	classFilter  := r.URL.Query().Get("coach_class")
 
 	// Build dynamic WHERE clause
 	conditions := []string{"1=1"}
@@ -482,6 +484,16 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 		args = append(args, dateFilter)
 		argIdx++
 	}
+	if trainIDFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("t.id = $%d", argIdx))
+		args = append(args, trainIDFilter)
+		argIdx++
+	}
+	if classFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("c.coach_class = $%d", argIdx))
+		args = append(args, classFilter)
+		argIdx++
+	}
 
 	whereClause := ""
 	for i, c := range conditions {
@@ -497,12 +509,15 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 			b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''),
 			s_start.name, s_end.name,
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
-			c.coach_number, s.seat_number, b.created_at::text
+			c.coach_number, s.seat_number, b.created_at::text,
+			COALESCE(t.id::text, ''), COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(c.coach_class, 'SECOND')
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
 		JOIN seats s          ON s.id        = b.seat_id
 		JOIN coaches c        ON c.id        = s.coach_id
+		LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+		LEFT JOIN trains t     ON t.id      = sch.train_id
 		%s
 		ORDER BY b.created_at DESC
 		LIMIT 500
@@ -528,6 +543,10 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 		CoachNumber      int     `json:"coach_number"`
 		SeatNumber       int     `json:"seat_number"`
 		CreatedAt        string  `json:"created_at"`
+		TrainID          string  `json:"train_id"`
+		TrainName        string  `json:"train_name"`
+		TrainNumber      string  `json:"train_number"`
+		CoachClass       string  `json:"coach_class"`
 	}
 
 	var bookings []bookingRow
@@ -538,6 +557,7 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 			&b.StartStationName, &b.EndStationName,
 			&b.StartSeq, &b.EndSeq, &b.FareLKR, &b.Status,
 			&b.CoachNumber, &b.SeatNumber, &b.CreatedAt,
+			&b.TrainID, &b.TrainName, &b.TrainNumber, &b.CoachClass,
 		); err != nil {
 			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return

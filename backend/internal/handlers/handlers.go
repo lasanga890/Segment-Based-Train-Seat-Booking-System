@@ -61,6 +61,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 			r.Patch("/stations/{id}/status", h.ToggleStationStatus)
 
 			// Trains admin
+			r.Get("/trains", h.ListTrains)
 			r.Post("/trains", h.CreateTrain)
 			r.Put("/trains/{id}", h.UpdateTrain)
 			r.Delete("/trains/{id}", h.DeleteTrain)

@@ -79,6 +79,37 @@ func (h *Handler) ToggleStationStatus(w http.ResponseWriter, r *http.Request) {
 
 // ─── Train CRUD ───────────────────────────────────────────────────────────────
 
+func (h *Handler) ListTrains(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(), `
+		SELECT id::text, train_number, name, direction FROM trains ORDER BY train_number ASC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch trains")
+		return
+	}
+	defer rows.Close()
+
+	type trainRow struct {
+		ID          string `json:"id"`
+		TrainNumber string `json:"train_number"`
+		Name        string `json:"name"`
+		Direction   string `json:"direction"`
+	}
+	var list []trainRow
+	for rows.Next() {
+		var t trainRow
+		if err := rows.Scan(&t.ID, &t.TrainNumber, &t.Name, &t.Direction); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error")
+			return
+		}
+		list = append(list, t)
+	}
+	if list == nil {
+		list = []trainRow{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
 func (h *Handler) CreateTrain(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TrainNumber string `json:"train_number"`

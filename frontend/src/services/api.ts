@@ -73,6 +73,10 @@ export interface Booking {
   coach_number: number
   seat_number: number
   created_at: string
+  train_id?: string
+  train_name?: string
+  train_number?: string
+  coach_class?: string
 }
 
 export interface HoldRequest {
@@ -255,6 +259,11 @@ export interface AdminCoach {
   coach_type: 'RESERVED'|'UNRESERVED'; coach_class: string;
   total_seats: number; label: string;
 }
+export const adminGetTrains = async (): Promise<AdminTrain[]> => {
+  const res = await fetch(`${BASE_URL}/admin/trains`)
+  if (!res.ok) throw new Error('Failed to fetch trains')
+  return res.json()
+}
 export const adminCreateTrain = async (data: Omit<AdminTrain,'id'>) => {
   const res = await fetch(`${BASE_URL}/admin/trains`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to create train')
@@ -334,7 +343,7 @@ export const adminGetSeatOccupancy = async (seatId: string) => {
   if (!res.ok) throw new Error('Failed to fetch seat occupancy')
   return res.json()
 }
-export const adminGetAllBookings = async (params?: {status?:string, search?:string, date?:string}): Promise<Booking[]> => {
+export const adminGetAllBookings = async (params?: {status?:string, search?:string, date?:string, train_id?:string, coach_class?:string}): Promise<Booking[]> => {
   const query = new URLSearchParams(params as any).toString()
   const res = await fetch(`${BASE_URL}/admin/bookings${query ? `?${query}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch bookings')

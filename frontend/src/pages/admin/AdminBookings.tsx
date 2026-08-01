@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { adminGetAllBookings, adminCancelBooking, Booking } from '../../services/api'
-import { Search, Copy, Ban, CheckCircle2, Inbox } from 'lucide-react'
+import { adminGetAllBookings, adminCancelBooking, adminGetTrains, Booking, AdminTrain } from '../../services/api'
+import { Search, Copy, Ban, CheckCircle2, Inbox, Train } from 'lucide-react'
 
 const statusColors: Record<string, string> = {
   CONFIRMED: 'bg-green-500/20 text-green-400',
@@ -9,21 +9,38 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-red-500/20 text-red-400 line-through',
 }
 
+const classColors: Record<string, string> = {
+  FIRST:  'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  SECOND: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  THIRD:  'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+}
+
 export default function AdminBookings() {
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [trains, setTrains]     = useState<AdminTrain[]>([])
   const [loading, setLoading]   = useState(true)
   
-  const [search, setSearch] = useState('')
+  const [search, setSearch]   = useState('')
   const [statusF, setStatusF] = useState('ALL')
-  const [dateF, setDateF] = useState('')
+  const [trainF, setTrainF]   = useState('ALL')
+  const [classF, setClassF]   = useState('ALL')
+  const [dateF, setDateF]     = useState('')
 
   const [toast, setToast] = useState<string | null>(null)
+
+  useEffect(() => {
+    adminGetTrains()
+      .then(setTrains)
+      .catch(console.error)
+  }, [])
 
   const loadBookings = async () => {
     try {
       const data = await adminGetAllBookings({
         ...(search ? { search } : {}),
         ...(statusF !== 'ALL' ? { status: statusF } : {}),
+        ...(trainF !== 'ALL' ? { train_id: trainF } : {}),
+        ...(classF !== 'ALL' ? { coach_class: classF } : {}),
         ...(dateF ? { date: dateF } : {})
       })
       setBookings(data)
@@ -31,7 +48,7 @@ export default function AdminBookings() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { loadBookings() }, [statusF, dateF]) // reload on filter change
+  useEffect(() => { loadBookings() }, [statusF, trainF, classF, dateF])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +58,8 @@ export default function AdminBookings() {
   const handleClear = () => {
     setSearch('')
     setStatusF('ALL')
+    setTrainF('ALL')
+    setClassF('ALL')
     setDateF('')
     setTimeout(loadBookings, 0)
   }
@@ -82,19 +101,43 @@ export default function AdminBookings() {
         </h2>
       </div>
 
-      <div className="glass-card p-4 mb-6 flex flex-wrap gap-4 items-center">
-        <form onSubmit={handleSearch} className="flex-1 min-w-[250px] relative">
+      {/* Filter Bar */}
+      <div className="glass-card p-4 mb-6 flex flex-wrap gap-3 items-center">
+        <form onSubmit={handleSearch} className="flex-1 min-w-[200px] relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input type="text" placeholder="Search ID / Name / Email..." className="input-field pl-10" value={search} onChange={e => setSearch(e.target.value)} />
+          <input type="text" placeholder="Search ID / Name / Email..." className="input-field pl-10 text-sm py-2.5" value={search} onChange={e => setSearch(e.target.value)} />
         </form>
-        <select className="select-field py-3 w-40" value={statusF} onChange={e => setStatusF(e.target.value)}>
+
+        {/* Train Filter */}
+        <select className="select-field py-2.5 text-sm w-44" value={trainF} onChange={e => setTrainF(e.target.value)}>
+          <option value="ALL">All Trains</option>
+          {trains.map(t => (
+            <option key={t.id} value={t.id}>
+              {t.name} (#{t.train_number})
+            </option>
+          ))}
+        </select>
+
+        {/* Class Filter */}
+        <select className="select-field py-2.5 text-sm w-36" value={classF} onChange={e => setClassF(e.target.value)}>
+          <option value="ALL">All Classes</option>
+          <option value="FIRST">First Class</option>
+          <option value="SECOND">Second Class</option>
+          <option value="THIRD">Third Class</option>
+        </select>
+
+        {/* Status Filter */}
+        <select className="select-field py-2.5 text-sm w-36" value={statusF} onChange={e => setStatusF(e.target.value)}>
           <option value="ALL">All Statuses</option>
           <option value="CONFIRMED">Confirmed</option>
           <option value="HOLD">Hold</option>
           <option value="CANCELLED">Cancelled</option>
         </select>
-        <input type="date" className="input-field py-3 w-40" value={dateF} onChange={e => setDateF(e.target.value)} />
-        <button onClick={handleClear} className="btn-secondary py-3">Clear Filters</button>
+
+        {/* Date Filter */}
+        <input type="date" className="input-field py-2.5 text-sm w-36" value={dateF} onChange={e => setDateF(e.target.value)} />
+
+        <button onClick={handleClear} className="btn-secondary py-2.5 text-sm">Clear</button>
       </div>
 
       {loading ? (
@@ -107,7 +150,7 @@ export default function AdminBookings() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/5 text-left bg-white/[0.02]">
-                  {['Booking ID', 'Passenger', 'Route', 'Coach/Seat', 'Fare', 'Status', 'Booked At', 'Actions'].map(h => (
+                  {['Booking ID', 'Passenger', 'Train & Class', 'Route', 'Coach/Seat', 'Fare', 'Status', 'Booked At', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">
                       {h}
                     </th>
@@ -117,7 +160,7 @@ export default function AdminBookings() {
               <tbody>
                 {bookings.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-16 text-center">
+                    <td colSpan={9} className="px-4 py-16 text-center">
                       <div className="flex flex-col items-center text-slate-500">
                         <Inbox size={32} className="mb-2 opacity-50" />
                         <p>No bookings found matching your criteria</p>
@@ -138,7 +181,19 @@ export default function AdminBookings() {
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-200">{b.passenger_name}</p>
-                        <p className="text-xs text-slate-500">{b.passenger_email}</p>
+                        <p className="text-xs text-slate-500">{b.passenger_email || '-'}</p>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <div className="flex items-center gap-1.5 text-slate-200 font-medium mb-1">
+                          <Train size={12} className="text-brand-400" />
+                          <span>{b.train_name || 'Train'}</span>
+                          {b.train_number && <span className="text-slate-500">#{b.train_number}</span>}
+                        </div>
+                        {b.coach_class && (
+                          <span className={`inline-block text-[10px] px-2 py-0.5 rounded border font-semibold ${classColors[b.coach_class] || 'bg-slate-700 text-slate-300'}`}>
+                            {b.coach_class} CLASS
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-slate-400 text-xs">
                         <span className="text-slate-300">{b.start_station_name}</span> <br/>
@@ -148,7 +203,7 @@ export default function AdminBookings() {
                         C{b.coach_number} <br/> S{b.seat_number}
                       </td>
                       <td className="px-4 py-3 font-semibold text-brand-300">
-                        {b.fare_lkr?.toFixed(2)}
+                        LKR {b.fare_lkr?.toFixed(2)}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium tracking-wide ${statusColors[b.status] || 'bg-slate-700 text-slate-400'}`}>
