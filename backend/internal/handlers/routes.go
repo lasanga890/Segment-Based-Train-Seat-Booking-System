@@ -421,7 +421,55 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, booking)
+	// Fetch full details with joined train, schedule, coach, seat, and station names
+	var fullBooking struct {
+		ID               string  `json:"id"`
+		PassengerName    string  `json:"passenger_name"`
+		PassengerEmail   string  `json:"passenger_email"`
+		SeatID           string  `json:"seat_id"`
+		StartStationName string  `json:"start_station_name"`
+		EndStationName   string  `json:"end_station_name"`
+		StartSeq         int     `json:"start_seq"`
+		EndSeq           int     `json:"end_seq"`
+		FareLKR          float64 `json:"fare_lkr"`
+		Status           string  `json:"status"`
+		CoachNumber      int     `json:"coach_number"`
+		SeatNumber       int     `json:"seat_number"`
+		CreatedAt        string  `json:"created_at"`
+		TrainName        string  `json:"train_name"`
+		TrainNumber      string  `json:"train_number"`
+		DepartureTime    string  `json:"departure_time"`
+	}
+
+	err = h.db.QueryRow(r.Context(), `
+		SELECT
+			b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''), b.seat_id::text,
+			s_start.name, s_end.name,
+			b.start_seq, b.end_seq, b.fare_lkr, b.status,
+			c.coach_number, s.seat_number,
+			b.created_at::text,
+			COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(sch.departure_time::text, '')
+		FROM bookings b
+		JOIN stations s_start ON s_start.id = b.start_station_id
+		JOIN stations s_end   ON s_end.id   = b.end_station_id
+		JOIN seats s          ON s.id        = b.seat_id
+		JOIN coaches c        ON c.id        = s.coach_id
+		LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+		LEFT JOIN trains t     ON t.id      = sch.train_id
+		WHERE b.id = $1
+	`, booking.ID).Scan(
+		&fullBooking.ID, &fullBooking.PassengerName, &fullBooking.PassengerEmail, &fullBooking.SeatID,
+		&fullBooking.StartStationName, &fullBooking.EndStationName,
+		&fullBooking.StartSeq, &fullBooking.EndSeq, &fullBooking.FareLKR, &fullBooking.Status,
+		&fullBooking.CoachNumber, &fullBooking.SeatNumber, &fullBooking.CreatedAt,
+		&fullBooking.TrainName, &fullBooking.TrainNumber, &fullBooking.DepartureTime,
+	)
+	if err != nil {
+		writeJSON(w, http.StatusCreated, booking)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, fullBooking)
 }
 
 // ReleaseHold cancels a hold when the user exits checkout.
@@ -460,6 +508,9 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 		CoachNumber      int     `json:"coach_number"`
 		SeatNumber       int     `json:"seat_number"`
 		CreatedAt        string  `json:"created_at"`
+		TrainName        string  `json:"train_name"`
+		TrainNumber      string  `json:"train_number"`
+		DepartureTime    string  `json:"departure_time"`
 	}
 
 	err = h.db.QueryRow(r.Context(), `
@@ -468,18 +519,22 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 			s_start.name, s_end.name,
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
 			c.coach_number, s.seat_number,
-			b.created_at::text
+			b.created_at::text,
+			COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(sch.departure_time::text, '')
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
 		JOIN seats s          ON s.id        = b.seat_id
 		JOIN coaches c        ON c.id        = s.coach_id
+		LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+		LEFT JOIN trains t     ON t.id      = sch.train_id
 		WHERE b.id = $1
 	`, bookingID).Scan(
 		&booking.ID, &booking.PassengerName, &booking.PassengerEmail, &booking.SeatID,
 		&booking.StartStationName, &booking.EndStationName,
 		&booking.StartSeq, &booking.EndSeq, &booking.FareLKR, &booking.Status,
 		&booking.CoachNumber, &booking.SeatNumber, &booking.CreatedAt,
+		&booking.TrainName, &booking.TrainNumber, &booking.DepartureTime,
 	)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "Booking not found")

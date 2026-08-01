@@ -77,6 +77,7 @@ export interface Booking {
   train_name?: string
   train_number?: string
   coach_class?: string
+  departure_time?: string
 }
 
 export interface HoldRequest {
