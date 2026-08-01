@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, X } from 'lucide-react'
+import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, X, Route } from 'lucide-react'
 import { getStations, getSchedules, type Station, type Schedule } from '../services/api'
 
 export default function HomePage() {
@@ -306,16 +306,25 @@ export default function HomePage() {
                 <div className="space-y-3">
                   {schedules.map(schedule => (
                     <div key={schedule.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-slate-100">{schedule.train_name}</span>
-                        <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
-                          <span className="flex items-center gap-1"><Clock size={14}/> {schedule.departure_time.slice(11, 16)}</span>
-                          <span className="text-xs">Train #{schedule.train_number}</span>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-100 text-base">{schedule.train_name}</span>
+                          <span className="text-xs bg-brand-500/20 text-brand-300 px-2 py-0.5 rounded font-mono font-medium">#{schedule.train_number}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                          <span className="flex items-center gap-1 text-brand-300 font-semibold text-sm">
+                            <Clock size={14} className="text-brand-400" />
+                            {schedule.departure_time.slice(11, 16)}
+                          </span>
+                          <span className="flex items-center gap-1 text-slate-300">
+                            <Route size={13} className="text-slate-400" />
+                            Main Route: {schedule.direction === 'UP' ? 'Colombo Fort ➔ Badulla' : 'Badulla ➔ Colombo Fort'}
+                          </span>
                         </div>
                       </div>
                       <button
                         onClick={() => handleSelectTrain(schedule.id)}
-                        className="btn-primary py-2 px-4 text-sm"
+                        className="btn-primary py-2 px-4 text-sm shrink-0"
                       >
                         View Seats
                       </button>

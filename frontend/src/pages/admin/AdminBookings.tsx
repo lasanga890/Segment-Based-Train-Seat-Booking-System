@@ -110,9 +110,9 @@ export default function AdminBookings() {
 
         {/* Train Filter */}
         <select className="select-field py-2.5 text-sm w-44" value={trainF} onChange={e => setTrainF(e.target.value)}>
-          <option value="ALL">All Trains</option>
+          <option value="ALL" className="text-slate-900 bg-white">All Trains</option>
           {trains.map(t => (
-            <option key={t.id} value={t.id}>
+            <option key={t.id} value={t.id} className="text-slate-900 bg-white">
               {t.name} (#{t.train_number})
             </option>
           ))}
@@ -120,18 +120,18 @@ export default function AdminBookings() {
 
         {/* Class Filter */}
         <select className="select-field py-2.5 text-sm w-36" value={classF} onChange={e => setClassF(e.target.value)}>
-          <option value="ALL">All Classes</option>
-          <option value="FIRST">First Class</option>
-          <option value="SECOND">Second Class</option>
-          <option value="THIRD">Third Class</option>
+          <option value="ALL" className="text-slate-900 bg-white">All Classes</option>
+          <option value="FIRST" className="text-slate-900 bg-white">First Class</option>
+          <option value="SECOND" className="text-slate-900 bg-white">Second Class</option>
+          <option value="THIRD" className="text-slate-900 bg-white">Third Class</option>
         </select>
 
         {/* Status Filter */}
         <select className="select-field py-2.5 text-sm w-36" value={statusF} onChange={e => setStatusF(e.target.value)}>
-          <option value="ALL">All Statuses</option>
-          <option value="CONFIRMED">Confirmed</option>
-          <option value="HOLD">Hold</option>
-          <option value="CANCELLED">Cancelled</option>
+          <option value="ALL" className="text-slate-900 bg-white">All Statuses</option>
+          <option value="CONFIRMED" className="text-slate-900 bg-white">Confirmed</option>
+          <option value="HOLD" className="text-slate-900 bg-white">Hold</option>
+          <option value="CANCELLED" className="text-slate-900 bg-white">Cancelled</option>
         </select>
 
         {/* Date Filter */}

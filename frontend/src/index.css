@@ -93,4 +93,9 @@
   .select-field {
     @apply input-field appearance-none cursor-pointer;
   }
+
+  select option {
+    color: #0f172a !important;
+    background-color: #ffffff !important;
+  }
 }
