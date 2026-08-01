@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/lasanga890/segment-train-booking/internal/models"
 	"github.com/lasanga890/segment-train-booking/internal/services"
 )
 
@@ -120,7 +121,7 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if seats == nil {
-		seats = []interface{}{}
+		seats = []models.SeatAvailability{}
 	}
 	writeJSON(w, http.StatusOK, seats)
 }

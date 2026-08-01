@@ -26,6 +26,24 @@ func New(db *pgxpool.Pool, rdb *redis.Client, cfg *config.Config) *Handler {
 
 // RegisterRoutes mounts all API routes on the given router.
 func (h *Handler) RegisterRoutes(r *chi.Mux) {
+	// Custom CORS middleware for development
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+			if r.Method == "OPTIONS" {
+				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// Public API routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Health check
@@ -102,22 +120,3 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ─── Stub handlers (implemented in Phase 3) ───────────────────────────────────
-
-func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request)      { writeStub(w, "stations") }
-func (h *Handler) ListCoaches(w http.ResponseWriter, r *http.Request)       { writeStub(w, "coaches") }
-func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) { writeStub(w, "seat_availability") }
-func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request)          { writeStub(w, "hold_seat") }
-func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request)    { writeStub(w, "confirm_booking") }
-func (h *Handler) ReleaseHold(w http.ResponseWriter, r *http.Request)       { writeStub(w, "release_hold") }
-func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request)        { writeStub(w, "get_booking") }
-func (h *Handler) GetAdminMetrics(w http.ResponseWriter, r *http.Request)   { writeStub(w, "admin_metrics") }
-func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request)   { writeStub(w, "admin_bookings") }
-
-func writeStub(w http.ResponseWriter, endpoint string) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"status":  "stub",
-		"message": endpoint + " — implementation coming in Phase 3",
-	})
-}

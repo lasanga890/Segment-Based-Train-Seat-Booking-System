@@ -8,8 +8,10 @@ import BookingModal from '../components/BookingModal'
 export default function SeatsPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const fromSeq = parseInt(searchParams.get('from') || '0')
-  const toSeq   = parseInt(searchParams.get('to')   || '0')
+  const fromParam = searchParams.get('from')
+  const toParam = searchParams.get('to')
+  const fromSeq = fromParam !== null && fromParam !== '' ? parseInt(fromParam) : -1
+  const toSeq   = toParam !== null && toParam !== '' ? parseInt(toParam) : -1
 
   const [seats, setSeats]           = useState<SeatAvailability[]>([])
   const [stations, setStations]     = useState<Station[]>([])
@@ -22,7 +24,7 @@ export default function SeatsPage() {
   const toStation   = stations.find(s => s.sequence_order === toSeq)
 
   useEffect(() => {
-    if (!fromSeq || !toSeq || fromSeq >= toSeq) {
+    if (fromSeq === -1 || toSeq === -1 || fromSeq >= toSeq) {
       navigate('/')
       return
     }
