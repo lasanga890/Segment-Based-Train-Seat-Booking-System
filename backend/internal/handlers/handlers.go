@@ -45,6 +45,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 
 		// Bookings
 		r.Post("/bookings/hold", h.HoldSeat)
+		r.Post("/bookings/hold-many", h.HoldManySeats)
 		r.Post("/bookings/confirm", h.ConfirmBooking)
 		r.Delete("/bookings/hold/{holdId}", h.ReleaseHold)
 		r.Get("/bookings/{id}", h.GetBooking)
@@ -54,6 +55,34 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 			// TODO: r.Use(h.AdminAuthMiddleware)
 			r.Get("/metrics", h.GetAdminMetrics)
 			r.Get("/bookings", h.ListAllBookings)
+			// Stations admin
+			r.Post("/stations", h.CreateStation)
+			r.Put("/stations/{id}", h.UpdateStation)
+			r.Patch("/stations/{id}/status", h.ToggleStationStatus)
+
+			// Trains admin
+			r.Post("/trains", h.CreateTrain)
+			r.Put("/trains/{id}", h.UpdateTrain)
+			r.Delete("/trains/{id}", h.DeleteTrain)
+
+			// Coaches admin
+			r.Get("/trains/{trainId}/coaches", h.ListTrainCoaches)
+			r.Post("/trains/{trainId}/coaches", h.AddCoachToTrain)
+			r.Put("/coaches/{id}", h.UpdateCoach)
+			r.Delete("/coaches/{id}", h.RemoveCoach)
+
+			// Schedules admin
+			r.Post("/schedules", h.CreateSchedule)
+			r.Put("/schedules/{id}", h.UpdateSchedule)
+			r.Patch("/schedules/{id}/cancel", h.CancelSchedule)
+
+			// Booking operations
+			r.Patch("/bookings/{id}/cancel", h.CancelBooking)
+			r.Get("/seats/{seatId}/occupancy", h.GetSeatOccupancy)
+
+			// Analytics
+			r.Get("/analytics/segments", h.GetSegmentAnalytics)
+			r.Get("/analytics/revenue", h.GetRevenueAnalytics)
 		})
 	})
 }

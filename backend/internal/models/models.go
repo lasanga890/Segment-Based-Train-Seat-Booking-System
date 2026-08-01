@@ -41,6 +41,7 @@ type Coach struct {
 	ID          uuid.UUID `json:"id" db:"id"`
 	CoachNumber int       `json:"coach_number" db:"coach_number"`
 	CoachType   CoachType `json:"coach_type" db:"coach_type"`
+	CoachClass  string    `json:"coach_class" db:"coach_class"`
 	TotalSeats  int       `json:"total_seats" db:"total_seats"`
 	Label       string    `json:"label" db:"label"`
 }
@@ -109,6 +110,7 @@ type SeatAvailability struct {
 	SeatID      uuid.UUID `json:"seat_id"`
 	CoachNumber int       `json:"coach_number"`
 	CoachType   CoachType `json:"coach_type"`
+	CoachClass  string    `json:"coach_class"`
 	SeatNumber  int       `json:"seat_number"`
 	// available: seat is free for the entire queried leg
 	// partial:   seat has bookings on other legs but is free for queried leg

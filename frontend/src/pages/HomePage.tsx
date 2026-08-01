@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock } from 'lucide-react'
+import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, X } from 'lucide-react'
 import { getStations, getSchedules, type Station, type Schedule } from '../services/api'
 
 export default function HomePage() {
@@ -19,6 +19,10 @@ export default function HomePage() {
   // Schedules state
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [isSearchingTrains, setIsSearchingTrains] = useState(false)
+  
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedClass, setSelectedClass] = useState('SECOND')
 
   useEffect(() => {
     getStations()
@@ -40,6 +44,7 @@ export default function HomePage() {
     try {
       const fetchedSchedules = await getSchedules(travelDate, direction)
       setSchedules(fetchedSchedules)
+      setIsModalOpen(true) // Open the modal after fetching
     } catch (err) {
       setError('Failed to fetch available trains for this date.')
     } finally {
@@ -48,7 +53,7 @@ export default function HomePage() {
   }
 
   const handleSelectTrain = (scheduleId: string) => {
-    navigate(`/seats?schedule_id=${scheduleId}&from=${fromSeq}&to=${toSeq}`)
+    navigate(`/seats?schedule_id=${scheduleId}&coach_class=${selectedClass}&from=${fromSeq}&to=${toSeq}`)
   }
 
   const validDestinations = stations.filter(s => s.sequence_order !== parseInt(fromSeq || '-1'))
@@ -222,49 +227,10 @@ export default function HomePage() {
                   className="btn-primary w-full flex items-center justify-center gap-2"
                 >
                   <Train size={18} />
-                  {isSearchingTrains ? 'Searching...' : 'Find Available Trains'}
+                  {isSearchingTrains ? 'Searching...' : 'Proceed Booking'}
                 </button>
               </form>
             </motion.div>
-
-            {/* ── Available Trains (Schedules) ─────────────────────────── */}
-            {schedules.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-8 space-y-4"
-              >
-                <h3 className="text-lg font-semibold text-white mb-4">Available Trains</h3>
-                {schedules.map(schedule => (
-                  <div key={schedule.id} className="glass-card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center border border-brand-500/30">
-                        <Train size={24} className="text-brand-400" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-100">{schedule.train_name}</h4>
-                        <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
-                          <span className="flex items-center gap-1"><Clock size={14}/> {schedule.departure_time.slice(11, 16)}</span>
-                          <span className="px-2 py-0.5 rounded-md bg-slate-800 text-xs font-medium">Train #{schedule.train_number}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleSelectTrain(schedule.id)}
-                      className="btn-primary py-2 px-6 w-full md:w-auto"
-                    >
-                      View Seats
-                    </button>
-                  </div>
-                ))}
-              </motion.div>
-            )}
-
-            {schedules.length === 0 && selectedFrom && selectedTo && !isSearchingTrains && (
-              <div className="mt-8 text-center text-slate-500">
-                <p>Click "Find Available Trains" to see schedules for {travelDate}</p>
-              </div>
-            )}
 
             {/* ── Route Strip ─────────────────────────────────────────── */}
             {!loading && stations.length > 0 && (
@@ -304,6 +270,67 @@ export default function HomePage() {
           </div>
         </main>
       </div>
+
+      {/* ── Booking Modal ────────────────────────────────────────────── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]"
+          >
+            <div className="p-6 border-b border-white/10 flex items-center justify-between bg-white/5">
+              <h3 className="text-xl font-bold text-white">Select Train & Class</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-white transition-colors">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Select Class</label>
+              <div className="relative mb-6">
+                <select
+                  className="select-field pr-10"
+                  value={selectedClass}
+                  onChange={e => setSelectedClass(e.target.value)}
+                >
+                  <option value="FIRST" className="text-slate-900 bg-white">First Class</option>
+                  <option value="SECOND" className="text-slate-900 bg-white">Second Class</option>
+                  <option value="THIRD" className="text-slate-900 bg-white">Third Class</option>
+                </select>
+                <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              </div>
+              
+              <h4 className="text-sm font-medium text-slate-300 mb-3">Available Trains</h4>
+              {schedules.length > 0 ? (
+                <div className="space-y-3">
+                  {schedules.map(schedule => (
+                    <div key={schedule.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between hover:bg-white/10 transition-colors">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-slate-100">{schedule.train_name}</span>
+                        <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
+                          <span className="flex items-center gap-1"><Clock size={14}/> {schedule.departure_time.slice(11, 16)}</span>
+                          <span className="text-xs">Train #{schedule.train_number}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleSelectTrain(schedule.id)}
+                        className="btn-primary py-2 px-4 text-sm"
+                      >
+                        View Seats
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center p-6 bg-white/5 rounded-xl border border-white/10 text-slate-400">
+                  No trains found for this route on the selected date.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }

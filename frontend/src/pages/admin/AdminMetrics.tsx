@@ -1,123 +1,129 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
-import { DollarSign, Users, TrendingUp, Train } from 'lucide-react'
-import { getAdminMetrics, getAllBookings, type AdminMetrics, type Booking } from '../../services/api'
+import { getAdminMetrics, adminGetSegmentAnalytics, adminGetRevenueAnalytics, AdminMetrics as MetricsType, SegmentAnalytic, RevenueAnalytic } from '../../services/api'
+import { Users, Banknote, Percent } from 'lucide-react'
 
-export default function AdminMetricsPage() {
-  const [metrics, setMetrics]   = useState<AdminMetrics | null>(null)
-  const [bookings, setBookings] = useState<Booking[]>([])
-  const [loading, setLoading]   = useState(true)
+export default function AdminMetrics() {
+  const [metrics, setMetrics] = useState<MetricsType | null>(null)
+  const [segments, setSegments] = useState<SegmentAnalytic[]>([])
+  const [revenue, setRevenue] = useState<RevenueAnalytic | null>(null)
+  const [loadingMetrics, setLM] = useState(true)
+  const [loadingSeg, setLS] = useState(true)
+  const [loadingRev, setLR] = useState(true)
 
   useEffect(() => {
-    Promise.all([
-      getAdminMetrics('admin-token'), // TODO: real JWT in Phase 5
-      getAllBookings('admin-token'),
-    ]).then(([m, b]) => {
-      setMetrics(m)
-      setBookings(b)
-    }).finally(() => setLoading(false))
+    getAdminMetrics('admin-token').then(setMetrics).finally(() => setLM(false))
+    adminGetSegmentAnalytics().then(setSegments).catch(()=>{}).finally(() => setLS(false))
+    adminGetRevenueAnalytics().then(setRevenue).catch(()=>{}).finally(() => setLR(false))
   }, [])
 
-  // Compute segment revenue from bookings for chart
-  const segmentData = bookings
-    .filter(b => b.status === 'CONFIRMED')
-    .reduce<Record<string, number>>((acc, b) => {
-      const key = `${b.start_station_name?.split(' ')[0]}→${b.end_station_name?.split(' ')[0]}`
-      acc[key] = (acc[key] || 0) + b.fare_lkr
-      return acc
-    }, {})
-
-  const chartData = Object.entries(segmentData)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 8)
-    .map(([name, revenue]) => ({ name, revenue }))
-
-  const COLORS = ['#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd', '#0284c7', '#0369a1', '#075985', '#0c4a6e']
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    )
-  }
-
-  const stats = [
-    { label: 'Total Bookings', value: metrics?.total_bookings ?? 0, icon: Users, color: 'text-brand-400' },
-    { label: 'Total Revenue', value: `LKR ${(metrics?.total_revenue_lkr ?? 0).toLocaleString()}`, icon: DollarSign, color: 'text-green-400' },
-    { label: 'Occupancy Rate', value: `${metrics?.occupancy_rate ?? 0}%`, icon: TrendingUp, color: 'text-amber-400' },
-    { label: 'Seats Available', value: 144, icon: Train, color: 'text-slate-400' },
-  ]
-
   return (
-    <div>
-      <h2 className="text-2xl font-black text-white mb-6">Dashboard</h2>
+    <div className="space-y-6">
+      <h2 className="text-2xl font-black text-white mb-2">Dashboard Overview</h2>
 
-      {/* ── Stat Cards ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-        {stats.map((stat, i) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.08 }}
-            className="glass-card p-5"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">{stat.label}</p>
-              <stat.icon size={16} className={stat.color} />
-            </div>
-            <p className="text-2xl font-black text-white">{stat.value}</p>
-          </motion.div>
-        ))}
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <MetricCard title="Total Bookings" value={loadingMetrics ? '...' : metrics?.total_bookings} icon={<Users className="text-brand-400" size={24} />} loading={loadingMetrics} />
+        <MetricCard title="Total Revenue" value={loadingMetrics ? '...' : `LKR ${metrics?.total_revenue_lkr?.toLocaleString(undefined, { minimumFractionDigits: 2 })}`} icon={<Banknote className="text-green-400" size={24} />} loading={loadingMetrics} />
+        <MetricCard title="Occupancy Rate" value={loadingMetrics ? '...' : `${metrics?.occupancy_rate}%`} icon={<Percent className="text-amber-400" size={24} />} loading={loadingMetrics} />
       </div>
 
-      {/* ── Revenue Chart ────────────────────────────────────────── */}
-      {chartData.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="glass-card p-6"
-        >
-          <h3 className="text-sm font-semibold text-slate-300 mb-6">Revenue by Route Segment (LKR)</h3>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis
-                dataKey="name"
-                tick={{ fill: '#64748b', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: '#64748b', fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <Tooltip
-                contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }}
-                labelStyle={{ color: '#94a3b8' }}
-                itemStyle={{ color: '#38bdf8' }}
-                formatter={(v: number) => [`LKR ${v.toFixed(2)}`, 'Revenue']}
-              />
-              <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
-                {chartData.map((_, index) => (
-                  <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </motion.div>
-      )}
-
-      {bookings.length === 0 && (
-        <div className="glass-card p-12 text-center mt-6">
-          <Train size={32} className="text-slate-600 mx-auto mb-3" />
-          <p className="text-slate-400 text-sm">No bookings yet. Charts will appear after the first booking.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Heatmap */}
+        <div className="glass-card p-6">
+          <h3 className="text-lg font-bold text-white mb-4">Segment Occupancy Heatmap</h3>
+          {loadingSeg ? <Skeleton rows={5} /> : (
+            <div className="space-y-4">
+              {segments.length === 0 ? <p className="text-slate-500 text-sm">No segment data</p> : segments.map((s, i) => {
+                const color = s.occupancy_pct > 80 ? 'bg-red-500' : s.occupancy_pct >= 50 ? 'bg-amber-500' : 'bg-green-500'
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-slate-300">{s.from_name} <span className="text-slate-500">→</span> {s.to_name}</span>
+                      <span className="font-mono text-slate-400">{s.occupancy_pct}%</span>
+                    </div>
+                    <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                      <div className={`h-full ${color} transition-all duration-1000`} style={{ width: `${s.occupancy_pct}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Revenue Breakdown */}
+        <div className="glass-card p-6">
+          <h3 className="text-lg font-bold text-white mb-4">Revenue Breakdown</h3>
+          {loadingRev ? <Skeleton rows={3} /> : (
+            revenue ? (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center gap-4">
+                  <div className="flex-1 bg-white/5 rounded-xl p-4 border border-white/10 text-center">
+                    <p className="text-xs text-slate-400 mb-1">Full-Route Tickets</p>
+                    <p className="text-xl font-bold text-brand-400">LKR {revenue.full_route_revenue.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-500">{revenue.full_route_count} bookings</p>
+                  </div>
+                  <div className="flex-1 bg-white/5 rounded-xl p-4 border border-white/10 text-center">
+                    <p className="text-xs text-slate-400 mb-1">Segment-Reused Tickets</p>
+                    <p className="text-xl font-bold text-purple-400">LKR {revenue.segment_reuse_revenue.toLocaleString()}</p>
+                    <p className="text-[10px] text-slate-500">{revenue.segment_reuse_count} bookings</p>
+                  </div>
+                </div>
+
+                {/* Donut split representation */}
+                <div>
+                  <p className="text-xs text-slate-400 mb-2 text-center">Revenue Split</p>
+                  <div className="h-4 w-full bg-white/5 rounded-full overflow-hidden flex">
+                    {revenue.total_revenue > 0 ? (
+                      <>
+                        <div className="h-full bg-brand-500" style={{ width: `${(revenue.full_route_revenue / revenue.total_revenue) * 100}%` }} title="Full Route" />
+                        <div className="h-full bg-purple-500" style={{ width: `${(revenue.segment_reuse_revenue / revenue.total_revenue) * 100}%` }} title="Segment Reused" />
+                      </>
+                    ) : (
+                      <div className="w-full bg-white/10" />
+                    )}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                    <span>Full Route ({revenue.total_revenue ? Math.round((revenue.full_route_revenue/revenue.total_revenue)*100) : 0}%)</span>
+                    <span>Reused ({revenue.total_revenue ? Math.round((revenue.segment_reuse_revenue/revenue.total_revenue)*100) : 0}%)</span>
+                  </div>
+                </div>
+              </div>
+            ) : <p className="text-slate-500 text-sm">No revenue data</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MetricCard({ title, value, icon, loading }: any) {
+  return (
+    <div className="glass-card p-6 flex items-center gap-4">
+      <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
+        {icon}
+      </div>
+      <div>
+        <p className="text-sm font-medium text-slate-400">{title}</p>
+        {loading ? (
+          <div className="h-6 w-24 bg-white/10 rounded animate-pulse mt-1" />
+        ) : (
+          <p className="text-2xl font-black text-white">{value}</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Skeleton({ rows }: { rows: number }) {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i}>
+          <div className="flex justify-between mb-1"><div className="h-3 w-1/3 bg-white/10 rounded animate-pulse"/><div className="h-3 w-8 bg-white/10 rounded animate-pulse"/></div>
+          <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-white/10 w-2/3 animate-pulse"/></div>
+        </div>
+      ))}
     </div>
   )
 }

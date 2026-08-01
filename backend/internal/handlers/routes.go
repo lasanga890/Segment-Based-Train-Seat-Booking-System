@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -141,9 +142,10 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	scheduleIDStr := r.URL.Query().Get("schedule_id")
+	coachClass := r.URL.Query().Get("coach_class")
 
-	if fromStr == "" || toStr == "" || scheduleIDStr == "" {
-		writeError(w, http.StatusBadRequest, "Query params 'from', 'to', and 'schedule_id' are required")
+	if fromStr == "" || toStr == "" || scheduleIDStr == "" || coachClass == "" {
+		writeError(w, http.StatusBadRequest, "Query params 'from', 'to', 'schedule_id', and 'coach_class' are required")
 		return
 	}
 
@@ -165,7 +167,7 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svc := services.NewAvailabilityService(h.db)
-	seats, err := svc.GetAvailability(r.Context(), scheduleID, fromSeq, toSeq)
+	seats, err := svc.GetAvailability(r.Context(), scheduleID, coachClass, fromSeq, toSeq)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch seat availability")
 		return
@@ -220,6 +222,84 @@ func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
 		"expires_at": result.ExpiresAt,
 		"fare":       result.Fare,
 	})
+}
+
+// HoldManySeats places holds on multiple seats in a single request.
+// POST /api/v1/bookings/hold-many
+func (h *Handler) HoldManySeats(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ScheduleID string   `json:"schedule_id"`
+		SeatIDs    []string `json:"seat_ids"`
+		FromSeq    int      `json:"from_seq"`
+		ToSeq      int      `json:"to_seq"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if len(req.SeatIDs) == 0 || len(req.SeatIDs) > 6 {
+		writeError(w, http.StatusBadRequest, "Between 1 and 6 seat_ids required")
+		return
+	}
+
+	scheduleID, err := uuid.Parse(req.ScheduleID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid schedule_id")
+		return
+	}
+
+	bookingSvc := services.NewBookingService(h.db, h.rdb, h.newFareService(), h.cfg.SeatHoldDurationMinutes)
+
+	type holdItem struct {
+		HoldID    string      `json:"hold_id"`
+		SeatID    string      `json:"seat_id"`
+		ExpiresAt interface{} `json:"expires_at"`
+		Fare      interface{} `json:"fare"`
+	}
+
+	results := make([]holdItem, 0, len(req.SeatIDs))
+	heldKeys := []string{} // track holds to release if one fails
+
+	for _, seatIDStr := range req.SeatIDs {
+		seatID, err := uuid.Parse(seatIDStr)
+		if err != nil {
+			// Release all successfully placed holds before returning
+			for _, hid := range heldKeys {
+				bookingSvc.ReleaseHold(r.Context(), hid)
+			}
+			writeError(w, http.StatusBadRequest, "Invalid seat_id: "+seatIDStr)
+			return
+		}
+
+		result, err := bookingSvc.HoldSeat(r.Context(), services.HoldRequest{
+			ScheduleID: scheduleID,
+			SeatID:     seatID,
+			FromSeq:    req.FromSeq,
+			ToSeq:      req.ToSeq,
+		})
+		if err != nil {
+			// Release all previously held seats atomically
+			for _, hid := range heldKeys {
+				bookingSvc.ReleaseHold(r.Context(), hid)
+			}
+			if err == services.ErrSeatNotAvailable {
+				writeError(w, http.StatusConflict, "One or more seats are not available: "+seatIDStr)
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "Failed to hold seat: "+seatIDStr)
+			return
+		}
+
+		heldKeys = append(heldKeys, result.HoldID)
+		results = append(results, holdItem{
+			HoldID:    result.HoldID,
+			SeatID:    seatIDStr,
+			ExpiresAt: result.ExpiresAt,
+			Fare:      result.Fare,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, results)
 }
 
 // ConfirmBooking converts a hold into a confirmed booking (with DB transaction locking).
@@ -364,9 +444,46 @@ func (h *Handler) GetAdminMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListAllBookings returns all bookings for admin view.
-// GET /api/v1/admin/bookings
+// GET /api/v1/admin/bookings?status=CONFIRMED&search=john&date=2026-08-01
 func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(), `
+	statusFilter := r.URL.Query().Get("status")
+	searchFilter := r.URL.Query().Get("search")
+	dateFilter   := r.URL.Query().Get("date")
+
+	// Build dynamic WHERE clause
+	conditions := []string{"1=1"}
+	args := []interface{}{}
+	argIdx := 1
+
+	if statusFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("b.status = $%d", argIdx))
+		args = append(args, statusFilter)
+		argIdx++
+	}
+	if searchFilter != "" {
+		conditions = append(conditions, fmt.Sprintf(
+			"(b.passenger_name ILIKE $%d OR b.passenger_email ILIKE $%d OR b.id::text ILIKE $%d)",
+			argIdx, argIdx, argIdx,
+		))
+		args = append(args, "%"+searchFilter+"%")
+		argIdx++
+	}
+	if dateFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("b.created_at::date = $%d", argIdx))
+		args = append(args, dateFilter)
+		argIdx++
+	}
+
+	whereClause := ""
+	for i, c := range conditions {
+		if i == 0 {
+			whereClause = "WHERE " + c
+		} else {
+			whereClause += " AND " + c
+		}
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
 			b.id, b.passenger_name, b.passenger_email,
 			s_start.name, s_end.name,
@@ -377,11 +494,14 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
 		JOIN seats s          ON s.id        = b.seat_id
 		JOIN coaches c        ON c.id        = s.coach_id
+		%s
 		ORDER BY b.created_at DESC
 		LIMIT 500
-	`)
+	`, whereClause)
+
+	rows, err := h.db.Query(r.Context(), query, args...)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to fetch bookings")
+		writeError(w, http.StatusInternalServerError, "Failed to fetch bookings: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -410,7 +530,7 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 			&b.StartSeq, &b.EndSeq, &b.FareLKR, &b.Status,
 			&b.CoachNumber, &b.SeatNumber, &b.CreatedAt,
 		); err != nil {
-			writeError(w, http.StatusInternalServerError, "Scan error")
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
 		bookings = append(bookings, b)
@@ -422,6 +542,7 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
 
 func (h *Handler) newFareService() *services.FareService {
 	return services.NewFareService(

@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { Train, BarChart3, List } from 'lucide-react'
+import { Train, BarChart3, List, MapPin, Calendar } from 'lucide-react'
 
 export default function AdminLayout() {
   return (
@@ -28,6 +28,48 @@ export default function AdminLayout() {
         >
           <BarChart3 size={15} />
           Dashboard
+        </NavLink>
+
+        <NavLink
+          to="/admin/stations"
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-brand-600 text-white font-medium'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`
+          }
+        >
+          <MapPin size={15} />
+          Stations
+        </NavLink>
+
+        <NavLink
+          to="/admin/trains"
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-brand-600 text-white font-medium'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`
+          }
+        >
+          <Train size={15} />
+          Trains
+        </NavLink>
+
+        <NavLink
+          to="/admin/schedules"
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-brand-600 text-white font-medium'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`
+          }
+        >
+          <Calendar size={15} />
+          Schedules
         </NavLink>
 
         <NavLink

@@ -41,6 +41,7 @@ export interface SeatAvailability {
   seat_id: string
   coach_number: number
   coach_type: 'RESERVED' | 'UNRESERVED'
+  coach_class: string
   seat_number: number
   status: SeatStatus
 }
@@ -76,6 +77,20 @@ export interface Booking {
 export interface HoldRequest {
   schedule_id: string
   seat_id: string
+  from_seq: number
+  to_seq: number
+}
+
+export interface MultiHoldItem {
+  hold_id: string
+  seat_id: string
+  expires_at: string
+  fare: FareBreakdown
+}
+
+export interface MultiHoldRequest {
+  schedule_id: string
+  seat_ids: string[]
   from_seq: number
   to_seq: number
 }
@@ -131,10 +146,11 @@ export const getCoaches = async (): Promise<Coach[]> => {
 
 export const getSeatAvailability = async (
   scheduleId: string,
+  coachClass: string,
   fromSeq: number,
   toSeq: number
 ): Promise<SeatAvailability[]> => {
-  const res = await fetch(`${BASE_URL}/seats/availability?schedule_id=${scheduleId}&from=${fromSeq}&to=${toSeq}`)
+  const res = await fetch(`${BASE_URL}/seats/availability?schedule_id=${scheduleId}&coach_class=${coachClass}&from=${fromSeq}&to=${toSeq}`)
   if (!res.ok) throw new Error('Failed to fetch seat availability')
   return res.json()
 }
@@ -150,6 +166,19 @@ export const holdSeat = async (req: HoldRequest): Promise<{ hold_id: string; exp
   if (!res.ok) {
     const err = await res.json()
     throw new Error(err.error || 'Failed to hold seat')
+  }
+  return res.json()
+}
+
+export const holdManySeats = async (req: MultiHoldRequest): Promise<MultiHoldItem[]> => {
+  const res = await fetch(`${BASE_URL}/bookings/hold-many`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to hold seats')
   }
   return res.json()
 }
@@ -179,18 +208,148 @@ export const getBooking = async (id: string): Promise<Booking> => {
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
-export const getAdminMetrics = async (token: string): Promise<AdminMetrics> => {
+export const getAdminMetrics = async (token?: string): Promise<AdminMetrics> => {
   const res = await fetch(`${BASE_URL}/admin/metrics`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
   if (!res.ok) throw new Error('Failed to fetch admin metrics')
   return res.json()
 }
 
-export const getAllBookings = async (token: string): Promise<Booking[]> => {
+export const getAllBookings = async (token?: string): Promise<Booking[]> => {
   const res = await fetch(`${BASE_URL}/admin/bookings`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
   if (!res.ok) throw new Error('Failed to fetch bookings')
+  return res.json()
+}
+
+// Admin Station types & APIs
+export interface AdminStation {
+  id: string; name: string; code: string;
+  sequence_order: number; distance_km: number; is_active: boolean;
+}
+export const adminCreateStation = async (data: Omit<AdminStation,'id'>) => {
+  const res = await fetch(`${BASE_URL}/admin/stations`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to create station')
+  return res.json()
+}
+export const adminUpdateStation = async (id: string, data: Partial<AdminStation>) => {
+  const res = await fetch(`${BASE_URL}/admin/stations/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to update station')
+  return res.json()
+}
+export const adminToggleStationStatus = async (id: string, is_active: boolean) => {
+  const res = await fetch(`${BASE_URL}/admin/stations/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active }) })
+  if (!res.ok) throw new Error('Failed to toggle station status')
+  return res.json()
+}
+
+// Admin Train types & APIs
+export interface AdminTrain {
+  id: string; train_number: string; name: string; direction: 'UP'|'DOWN';
+}
+export interface AdminCoach {
+  id: string; train_id: string; coach_number: number;
+  coach_type: 'RESERVED'|'UNRESERVED'; coach_class: string;
+  total_seats: number; label: string;
+}
+export const adminCreateTrain = async (data: Omit<AdminTrain,'id'>) => {
+  const res = await fetch(`${BASE_URL}/admin/trains`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to create train')
+  return res.json()
+}
+export const adminUpdateTrain = async (id: string, data: Partial<AdminTrain>) => {
+  const res = await fetch(`${BASE_URL}/admin/trains/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to update train')
+  return res.json()
+}
+export const adminDeleteTrain = async (id: string) => {
+  const res = await fetch(`${BASE_URL}/admin/trains/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete train')
+  return res.json()
+}
+export const adminListTrains = async (): Promise<AdminTrain[]> => {
+  const res = await fetch(`${BASE_URL}/admin/trains`)
+  if (!res.ok) throw new Error('Failed to fetch trains')
+  return res.json()
+}
+export const adminListTrainCoaches = async (trainId: string): Promise<AdminCoach[]> => {
+  const res = await fetch(`${BASE_URL}/admin/trains/${trainId}/coaches`)
+  if (!res.ok) throw new Error('Failed to fetch train coaches')
+  return res.json()
+}
+export const adminAddCoach = async (trainId: string, data: Omit<AdminCoach,'id'|'train_id'>) => {
+  const res = await fetch(`${BASE_URL}/admin/trains/${trainId}/coaches`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to add coach')
+  return res.json()
+}
+export const adminUpdateCoach = async (id: string, data: Partial<AdminCoach>) => {
+  const res = await fetch(`${BASE_URL}/admin/coaches/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to update coach')
+  return res.json()
+}
+export const adminRemoveCoach = async (id: string) => {
+  const res = await fetch(`${BASE_URL}/admin/coaches/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to remove coach')
+  return res.json()
+}
+
+// Admin Schedule types & APIs
+export interface AdminSchedule {
+  id: string; train_id: string; train_name: string; train_number: string;
+  direction: string; departure_date: string; departure_time: string; is_active: boolean;
+}
+export const adminCreateSchedule = async (data: {train_id:string, departure_date:string, departure_time:string}) => {
+  const res = await fetch(`${BASE_URL}/admin/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to create schedule')
+  return res.json()
+}
+export const adminUpdateSchedule = async (id: string, data: {departure_time:string}) => {
+  const res = await fetch(`${BASE_URL}/admin/schedules/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  if (!res.ok) throw new Error('Failed to update schedule')
+  return res.json()
+}
+export const adminCancelSchedule = async (id: string) => {
+  const res = await fetch(`${BASE_URL}/admin/schedules/${id}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to cancel schedule')
+  return res.json()
+}
+export const adminListSchedules = async (params?: {date_from?:string, date_to?:string, direction?:string}): Promise<AdminSchedule[]> => {
+  const query = new URLSearchParams(params as any).toString()
+  const res = await fetch(`${BASE_URL}/admin/schedules${query ? `?${query}` : ''}`)
+  if (!res.ok) throw new Error('Failed to fetch schedules')
+  return res.json()
+}
+
+// Admin Booking operations
+export const adminCancelBooking = async (id: string) => {
+  const res = await fetch(`${BASE_URL}/admin/bookings/${id}/cancel`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed to cancel booking')
+  return res.json()
+}
+export const adminGetSeatOccupancy = async (seatId: string) => {
+  const res = await fetch(`${BASE_URL}/admin/seats/${seatId}/occupancy`)
+  if (!res.ok) throw new Error('Failed to fetch seat occupancy')
+  return res.json()
+}
+export const adminGetAllBookings = async (params?: {status?:string, search?:string, date?:string}): Promise<Booking[]> => {
+  const query = new URLSearchParams(params as any).toString()
+  const res = await fetch(`${BASE_URL}/admin/bookings${query ? `?${query}` : ''}`)
+  if (!res.ok) throw new Error('Failed to fetch bookings')
+  return res.json()
+}
+
+// Analytics
+export interface SegmentAnalytic { from_seq:number; to_seq:number; from_name:string; to_name:string; total_bookings:number; occupancy_pct:number; }
+export interface RevenueAnalytic { total_revenue:number; full_route_revenue:number; segment_reuse_revenue:number; full_route_count:number; segment_reuse_count:number; }
+export const adminGetSegmentAnalytics = async (): Promise<SegmentAnalytic[]> => {
+  const res = await fetch(`${BASE_URL}/admin/analytics/segments`)
+  if (!res.ok) throw new Error('Failed to fetch segment analytics')
+  return res.json()
+}
+export const adminGetRevenueAnalytics = async (): Promise<RevenueAnalytic> => {
+  const res = await fetch(`${BASE_URL}/admin/analytics/revenue`)
+  if (!res.ok) throw new Error('Failed to fetch revenue analytics')
   return res.json()
 }

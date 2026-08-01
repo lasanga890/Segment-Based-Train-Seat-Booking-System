@@ -1,41 +1,100 @@
 import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { getAllBookings, type Booking } from '../../services/api'
+import { motion, AnimatePresence } from 'framer-motion'
+import { adminGetAllBookings, adminCancelBooking, Booking } from '../../services/api'
+import { Search, Copy, Ban, CheckCircle2, Inbox } from 'lucide-react'
 
 const statusColors: Record<string, string> = {
   CONFIRMED: 'bg-green-500/20 text-green-400',
   HOLD:      'bg-amber-500/20 text-amber-400',
-  CANCELLED: 'bg-red-500/20 text-red-400',
+  CANCELLED: 'bg-red-500/20 text-red-400 line-through',
 }
 
 export default function AdminBookings() {
   const [bookings, setBookings] = useState<Booking[]>([])
   const [loading, setLoading]   = useState(true)
-  const [search, setSearch]     = useState('')
+  
+  const [search, setSearch] = useState('')
+  const [statusF, setStatusF] = useState('ALL')
+  const [dateF, setDateF] = useState('')
 
-  useEffect(() => {
-    getAllBookings('admin-token')
-      .then(setBookings)
-      .finally(() => setLoading(false))
-  }, [])
+  const [toast, setToast] = useState<string | null>(null)
 
-  const filtered = bookings.filter(b =>
-    b.passenger_name?.toLowerCase().includes(search.toLowerCase()) ||
-    b.start_station_name?.toLowerCase().includes(search.toLowerCase()) ||
-    b.end_station_name?.toLowerCase().includes(search.toLowerCase())
-  )
+  const loadBookings = async () => {
+    try {
+      const data = await adminGetAllBookings({
+        ...(search ? { search } : {}),
+        ...(statusF !== 'ALL' ? { status: statusF } : {}),
+        ...(dateF ? { date: dateF } : {})
+      })
+      setBookings(data)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadBookings() }, [statusF, dateF]) // reload on filter change
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    loadBookings()
+  }
+
+  const handleClear = () => {
+    setSearch('')
+    setStatusF('ALL')
+    setDateF('')
+    setTimeout(loadBookings, 0)
+  }
+
+  const handleCancel = async (b: Booking) => {
+    if(confirm(`Are you sure you want to cancel booking #${b.id.substring(0,8)}? The seat will become immediately available.`)) {
+      try {
+        await adminCancelBooking(b.id)
+        setToast('Booking successfully cancelled.')
+        setTimeout(() => setToast(null), 3000)
+        loadBookings()
+      } catch (e) {
+        alert('Failed to cancel')
+      }
+    }
+  }
+
+  const copyId = (id: string) => {
+    navigator.clipboard.writeText(id)
+  }
 
   return (
     <div>
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+            className="fixed top-4 right-4 flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border bg-green-500/10 border-green-500/20 text-green-400 z-50"
+          >
+            <CheckCircle2 size={18} />
+            <span className="text-sm font-medium">{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-black text-white">All Bookings</h2>
-        <input
-          type="search"
-          placeholder="Search by passenger or station..."
-          className="input-field text-sm w-64"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <h2 className="text-2xl font-black text-white flex items-center gap-3">
+          Booking Management
+          <span className="text-sm bg-brand-600 px-3 py-1 rounded-full">{bookings.length}</span>
+        </h2>
+      </div>
+
+      <div className="glass-card p-4 mb-6 flex flex-wrap gap-4 items-center">
+        <form onSubmit={handleSearch} className="flex-1 min-w-[250px] relative">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+          <input type="text" placeholder="Search ID / Name / Email..." className="input-field pl-10" value={search} onChange={e => setSearch(e.target.value)} />
+        </form>
+        <select className="select-field py-3 w-40" value={statusF} onChange={e => setStatusF(e.target.value)}>
+          <option value="ALL">All Statuses</option>
+          <option value="CONFIRMED">Confirmed</option>
+          <option value="HOLD">Hold</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+        <input type="date" className="input-field py-3 w-40" value={dateF} onChange={e => setDateF(e.target.value)} />
+        <button onClick={handleClear} className="btn-secondary py-3">Clear Filters</button>
       </div>
 
       {loading ? (
@@ -47,50 +106,64 @@ export default function AdminBookings() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5 text-left">
-                  {['Passenger', 'Route', 'Coach / Seat', 'Fare (LKR)', 'Status', 'Booked At'].map(h => (
-                    <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <tr className="border-b border-white/5 text-left bg-white/[0.02]">
+                  {['Booking ID', 'Passenger', 'Route', 'Coach/Seat', 'Fare', 'Status', 'Booked At', 'Actions'].map(h => (
+                    <th key={h} className="px-4 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">
                       {h}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {bookings.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center text-slate-500 text-sm">
-                      No bookings found
+                    <td colSpan={8} className="px-4 py-16 text-center">
+                      <div className="flex flex-col items-center text-slate-500">
+                        <Inbox size={32} className="mb-2 opacity-50" />
+                        <p>No bookings found matching your criteria</p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((b, i) => (
+                  bookings.map((b, i) => (
                     <motion.tr
-                      key={b.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: Math.min(i * 0.02, 0.3) }}
+                      key={b.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i * 0.02, 0.3) }}
                       className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
                     >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-slate-300">{b.id.substring(0,8)}</span>
+                          <button onClick={() => copyId(b.id)} className="text-slate-500 hover:text-white"><Copy size={12}/></button>
+                        </div>
+                      </td>
                       <td className="px-4 py-3">
                         <p className="font-medium text-slate-200">{b.passenger_name}</p>
                         <p className="text-xs text-slate-500">{b.passenger_email}</p>
                       </td>
-                      <td className="px-4 py-3 text-slate-400">
-                        {b.start_station_name} → {b.end_station_name}
+                      <td className="px-4 py-3 text-slate-400 text-xs">
+                        <span className="text-slate-300">{b.start_station_name}</span> <br/>
+                        <span className="text-slate-500">to</span> <span className="text-slate-300">{b.end_station_name}</span>
                       </td>
-                      <td className="px-4 py-3 text-slate-400">
-                        C{b.coach_number} · S{b.seat_number}
+                      <td className="px-4 py-3 text-slate-400 font-mono text-xs">
+                        C{b.coach_number} <br/> S{b.seat_number}
                       </td>
                       <td className="px-4 py-3 font-semibold text-brand-300">
                         {b.fare_lkr?.toFixed(2)}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[b.status] || 'bg-slate-700 text-slate-400'}`}>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium tracking-wide ${statusColors[b.status] || 'bg-slate-700 text-slate-400'}`}>
                           {b.status}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-500 text-xs">
                         {b.created_at ? new Date(b.created_at).toLocaleString() : '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {(b.status === 'CONFIRMED' || b.status === 'HOLD') && (
+                          <button onClick={() => handleCancel(b)} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 px-2 py-1 rounded">
+                            <Ban size={12}/> Cancel
+                          </button>
+                        )}
                       </td>
                     </motion.tr>
                   ))
