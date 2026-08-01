@@ -8,3 +8,8 @@ ALTER TABLE coaches ADD COLUMN IF NOT EXISTS train_id UUID REFERENCES trains(id)
 
 -- Link existing coaches to the first two trains as an example
 UPDATE coaches SET train_id = '11111111-1111-1111-1111-111111111111' WHERE coach_number IN (1, 2, 3, 4);
+
+-- Drop global unique constraint on coach_number and make it unique per train
+ALTER TABLE coaches DROP CONSTRAINT IF EXISTS coaches_coach_number_key;
+CREATE UNIQUE INDEX IF NOT EXISTS coaches_train_coach_num_idx ON coaches (train_id, coach_number);
+
