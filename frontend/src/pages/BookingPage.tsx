@@ -42,7 +42,7 @@ export default function BookingPage() {
   const primary = bookings[0]
   const totalFare = bookings.reduce((sum, b) => sum + (b.fare_lkr || 0), 0)
   const bookingRef = primary.id?.slice(0, 8).toUpperCase()
-  const departureTime = primary.departure_time ? primary.departure_time.slice(11, 16) : null
+  const departureTime = primary.departure_time ? primary.departure_time.slice(0, 5) : null
 
   return (
     <div className="min-h-screen bg-slate-950 relative overflow-hidden flex items-center justify-center p-4">

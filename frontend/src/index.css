@@ -99,3 +99,28 @@
     background-color: #ffffff !important;
   }
 }
+
+@media print {
+  body {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    background-color: #0f172a !important; /* Keep the dark theme for the receipt */
+  }
+
+  /* Hide buttons during print */
+  button {
+    display: none !important;
+  }
+
+  /* Center the receipt and remove margins for clean print */
+  .min-h-screen {
+    min-height: auto !important;
+    padding: 0 !important;
+  }
+
+  /* Ensure background gradients and effects print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
