@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Navigate } from 'react-router-dom'
-import { Train, BarChart3, List, MapPin, Calendar, LogOut } from 'lucide-react'
+import { Train, BarChart3, List, MapPin, Calendar, LogOut, Inbox } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { getAdminToken } from '../../services/api'
 
@@ -101,6 +101,34 @@ export default function AdminLayout() {
         >
           <List size={15} />
           All Bookings
+        </NavLink>
+
+        <NavLink
+          to="/admin/reschedules"
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-brand-600 text-white font-medium'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`
+          }
+        >
+          <Train size={15} />
+          Reschedule Requests
+        </NavLink>
+
+        <NavLink
+          to="/admin/refunds"
+          className={({ isActive }) =>
+            `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              isActive
+                ? 'bg-brand-600 text-white font-medium'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`
+          }
+        >
+          <Inbox size={15} />
+          Refund Requests
         </NavLink>
 
         <div className="mt-auto pt-4 border-t border-white/5">

@@ -333,6 +333,47 @@ export const adminListTrainCoaches = async (trainId: string): Promise<AdminCoach
   if (!res.ok) throw new Error('Failed to fetch train coaches')
   return res.json()
 }
+
+// ─── Requests: Reschedule & Refund ───────────────────────────────────────────
+
+export const createRescheduleRequest = async (bookingId: string, req: { new_schedule_id?: string; new_start_station_id?: string; new_end_station_id?: string; new_seat_id?: string }) => {
+  const res = await authFetch(`${BASE_URL}/user/bookings/${bookingId}/reschedule`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to create reschedule request')
+  }
+  return res.json()
+}
+
+export const adminGetRefundRequests = async () => {
+  const res = await authFetch(`${BASE_URL}/admin/refund-requests`)
+  if (!res.ok) throw new Error('Failed to fetch refund requests')
+  return res.json()
+}
+
+export const adminApproveRefundRequest = async (id: string, adminNote?: string) => {
+  const res = await authFetch(`${BASE_URL}/admin/refund-requests/${id}/approve`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_note: adminNote || '' }) })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to approve refund request')
+  }
+  return res.json()
+}
+
+export const adminGetRescheduleRequests = async () => {
+  const res = await authFetch(`${BASE_URL}/admin/reschedule-requests`)
+  if (!res.ok) throw new Error('Failed to fetch reschedule requests')
+  return res.json()
+}
+
+export const adminApproveRescheduleRequest = async (id: string, adminNote?: string) => {
+  const res = await authFetch(`${BASE_URL}/admin/reschedule-requests/${id}/approve`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_note: adminNote || '' }) })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to approve reschedule request')
+  }
+  return res.json()
+}
 export const adminAddCoach = async (trainId: string, data: Omit<AdminCoach,'id'|'train_id'>) => {
   const res = await authFetch(`${BASE_URL}/admin/trains/${trainId}/coaches`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to add coach')

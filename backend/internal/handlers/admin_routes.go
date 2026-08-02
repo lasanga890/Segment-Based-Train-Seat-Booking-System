@@ -732,3 +732,175 @@ func (h *Handler) GetRevenueAnalytics(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, res)
 }
+
+// ─── Refund & Reschedule Admin Handlers ──────────────────────────────────────
+
+func (h *Handler) ListRefundRequests(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(), `
+		SELECT rr.id::text, rr.booking_id::text, rr.user_id::text, rr.requested_at::text, rr.refundable_amount, rr.status, rr.admin_note, rr.decided_at::text,
+			b.passenger_name, b.fare_lkr, sch.departure_date::text, sch.departure_time::text
+		FROM refund_requests rr
+		JOIN bookings b ON b.id = rr.booking_id
+		LEFT JOIN schedules sch ON sch.id = b.schedule_id
+		ORDER BY rr.requested_at DESC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch refund requests: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type row struct {
+		ID               string  `json:"id"`
+		BookingID        string  `json:"booking_id"`
+		UserID           string  `json:"user_id"`
+		RequestedAt      string  `json:"requested_at"`
+		RefundableAmount float64 `json:"refundable_amount"`
+		Status           string  `json:"status"`
+		AdminNote        *string `json:"admin_note"`
+		DecidedAt        *string `json:"decided_at"`
+		PassengerName    string  `json:"passenger_name"`
+		FareLKR          float64 `json:"fare_lkr"`
+		DepartureDate    *string `json:"departure_date"`
+		DepartureTime    *string `json:"departure_time"`
+	}
+
+	var list []row
+	for rows.Next() {
+		var rrow row
+		var decAt, depDate, depTime interface{}
+		if err := rows.Scan(&rrow.ID, &rrow.BookingID, &rrow.UserID, &rrow.RequestedAt, &rrow.RefundableAmount, &rrow.Status, &rrow.AdminNote, &decAt, &rrow.PassengerName, &rrow.FareLKR, &depDate, &depTime); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+			return
+		}
+		if decAt != nil {
+			s := fmt.Sprintf("%v", decAt)
+			rrow.DecidedAt = &s
+		}
+		if depDate != nil {
+			s := fmt.Sprintf("%v", depDate)
+			rrow.DepartureDate = &s
+		}
+		if depTime != nil {
+			s := fmt.Sprintf("%v", depTime)
+			rrow.DepartureTime = &s
+		}
+		list = append(list, rrow)
+	}
+	if list == nil {
+		list = []row{}
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) ApproveRefundRequest(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct { AdminNote string `json:"admin_note"` }
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	_, err := h.db.Exec(r.Context(), `UPDATE refund_requests SET status = 'APPROVED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to approve refund request: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+}
+
+func (h *Handler) ListRescheduleRequests(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.db.Query(r.Context(), `
+		SELECT rr.id::text, rr.booking_id::text, rr.user_id::text, rr.requested_at::text, rr.new_schedule_id::text, rr.new_start_station_id::text, rr.new_end_station_id::text, rr.new_seat_id::text, rr.status, rr.admin_note, rr.decided_at::text,
+			b.passenger_name, sch.departure_date::text, sch.departure_time::text
+		FROM reschedule_requests rr
+		JOIN bookings b ON b.id = rr.booking_id
+		LEFT JOIN schedules sch ON sch.id = b.schedule_id
+		ORDER BY rr.requested_at DESC
+	`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch reschedule requests: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type rrow struct {
+		ID                string  `json:"id"`
+		BookingID         string  `json:"booking_id"`
+		UserID            string  `json:"user_id"`
+		RequestedAt       string  `json:"requested_at"`
+		NewScheduleID     *string `json:"new_schedule_id"`
+		NewStartStationID *string `json:"new_start_station_id"`
+		NewEndStationID   *string `json:"new_end_station_id"`
+		NewSeatID         *string `json:"new_seat_id"`
+		Status            string  `json:"status"`
+		AdminNote         *string `json:"admin_note"`
+		DecidedAt         *string `json:"decided_at"`
+		PassengerName     string  `json:"passenger_name"`
+		DepartureDate     *string `json:"departure_date"`
+		DepartureTime     *string `json:"departure_time"`
+	}
+
+	var list []rrow
+	for rows.Next() {
+		var it rrow
+		var decAt, depDate, depTime interface{}
+		if err := rows.Scan(&it.ID, &it.BookingID, &it.UserID, &it.RequestedAt, &it.NewScheduleID, &it.NewStartStationID, &it.NewEndStationID, &it.NewSeatID, &it.Status, &it.AdminNote, &decAt, &it.PassengerName, &depDate, &depTime); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+			return
+		}
+		if decAt != nil { s := fmt.Sprintf("%v", decAt); it.DecidedAt = &s }
+		if depDate != nil { s := fmt.Sprintf("%v", depDate); it.DepartureDate = &s }
+		if depTime != nil { s := fmt.Sprintf("%v", depTime); it.DepartureTime = &s }
+		list = append(list, it)
+	}
+	if list == nil { list = []rrow{} }
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (h *Handler) ApproveRescheduleRequest(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct { AdminNote string `json:"admin_note"` }
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	// Fetch request details
+	var bookingID, newScheduleID, newStartID, newEndID, newSeatID *string
+	err := h.db.QueryRow(r.Context(), `SELECT booking_id::text, new_schedule_id::text, new_start_station_id::text, new_end_station_id::text, new_seat_id::text FROM reschedule_requests WHERE id = $1`, id).Scan(&bookingID, &newScheduleID, &newStartID, &newEndID, &newSeatID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "Reschedule request not found")
+		return
+	}
+
+	// Begin transaction to update booking and mark request approved
+	tx, err := h.db.Begin(r.Context())
+	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to start transaction"); return }
+	defer tx.Rollback(r.Context())
+
+	// Update booking with provided fields
+	if newScheduleID != nil && *newScheduleID != "" {
+		_, err = tx.Exec(r.Context(), `UPDATE bookings SET schedule_id = $1 WHERE id = $2`, *newScheduleID, *bookingID)
+		if err != nil { writeError(w, http.StatusInternalServerError, "Failed to update booking schedule"); return }
+	}
+	if newStartID != nil && *newStartID != "" && newEndID != nil && *newEndID != "" {
+		// fetch sequence orders for stations
+		var startSeq, endSeq int
+		err = tx.QueryRow(r.Context(), `SELECT sequence_order FROM stations WHERE id = $1`, *newStartID).Scan(&startSeq)
+		if err == nil {
+			err = tx.QueryRow(r.Context(), `SELECT sequence_order FROM stations WHERE id = $1`, *newEndID).Scan(&endSeq)
+		}
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid station IDs provided for reschedule")
+			return
+		}
+		_, err = tx.Exec(r.Context(), `UPDATE bookings SET start_station_id = $1, end_station_id = $2, start_seq = $3, end_seq = $4 WHERE id = $5`, *newStartID, *newEndID, startSeq, endSeq, *bookingID)
+		if err != nil { writeError(w, http.StatusInternalServerError, "Failed to update booking stations"); return }
+	}
+	if newSeatID != nil && *newSeatID != "" {
+		_, err = tx.Exec(r.Context(), `UPDATE bookings SET seat_id = $1 WHERE id = $2`, *newSeatID, *bookingID)
+		if err != nil { writeError(w, http.StatusInternalServerError, "Failed to update booking seat"); return }
+	}
+
+	_, err = tx.Exec(r.Context(), `UPDATE reschedule_requests SET status = 'APPROVED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
+	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to mark reschedule request approved"); return }
+
+	if err := tx.Commit(r.Context()); err != nil { writeError(w, http.StatusInternalServerError, "Failed to commit changes"); return }
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+}

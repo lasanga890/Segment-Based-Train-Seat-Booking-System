@@ -115,6 +115,13 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 			r.Patch("/bookings/{id}/cancel", h.CancelBooking)
 			r.Get("/seats/{seatId}/occupancy", h.GetSeatOccupancy)
 
+			// Refund & Reschedule Requests
+			r.Get("/refund-requests", h.ListRefundRequests)
+			r.Patch("/refund-requests/{id}/approve", h.ApproveRefundRequest)
+
+			r.Get("/reschedule-requests", h.ListRescheduleRequests)
+			r.Patch("/reschedule-requests/{id}/approve", h.ApproveRescheduleRequest)
+
 			// Analytics
 			r.Get("/analytics/segments", h.GetSegmentAnalytics)
 			r.Get("/analytics/revenue", h.GetRevenueAnalytics)

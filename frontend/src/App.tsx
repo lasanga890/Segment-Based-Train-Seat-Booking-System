@@ -17,6 +17,8 @@ const AdminBookings = lazy(() => import('./pages/admin/AdminBookings'))
 const AdminStations = lazy(() => import('./pages/admin/AdminStations'))
 const AdminTrains   = lazy(() => import('./pages/admin/AdminTrains'))
 const AdminSchedules= lazy(() => import('./pages/admin/AdminSchedules'))
+const AdminRefunds   = lazy(() => import('./pages/admin/AdminRefunds'))
+const AdminReschedules = lazy(() => import('./pages/admin/AdminReschedules'))
 
 function LoadingSpinner() {
   return (
@@ -53,6 +55,8 @@ export default function App() {
               <Route path="trains"    element={<AdminTrains />} />
               <Route path="schedules" element={<AdminSchedules />} />
               <Route path="bookings"  element={<AdminBookings />} />
+              <Route path="reschedules" element={<AdminReschedules />} />
+              <Route path="refunds" element={<AdminRefunds />} />
             </Route>
 
             {/* ── 404 ────────────────────────────────────────────────────── */}

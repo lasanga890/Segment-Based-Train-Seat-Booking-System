@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -368,17 +369,18 @@ func (h *Handler) CancelUserBooking(w http.ResponseWriter, r *http.Request) {
 
 	bookingID := chi.URLParam(r, "id")
 
-	// 1. Verify booking ownership and current status
+	// 1. Verify booking ownership and current status and fetch fare
 	var scheduleIDStr, coachClass string
 	var startSeq, endSeq int
 	var status string
+	var fare float64
 	err = h.db.QueryRow(r.Context(), `
-		SELECT COALESCE(b.schedule_id::text, ''), COALESCE(c.coach_class, 'SECOND'), b.start_seq, b.end_seq, b.status
+		SELECT COALESCE(b.schedule_id::text, ''), COALESCE(c.coach_class, 'SECOND'), b.start_seq, b.end_seq, b.status, COALESCE(b.fare_lkr, 0)
 		FROM bookings b
 		JOIN seats s ON s.id = b.seat_id
 		JOIN coaches c ON c.id = s.coach_id
 		WHERE b.id = $1 AND b.user_id = $2
-	`, bookingID, userID).Scan(&scheduleIDStr, &coachClass, &startSeq, &endSeq, &status)
+	`, bookingID, userID).Scan(&scheduleIDStr, &coachClass, &startSeq, &endSeq, &status, &fare)
 
 	if err != nil {
 		writeError(w, http.StatusNotFound, "Booking not found or not owned by user")
@@ -436,12 +438,80 @@ func (h *Handler) CancelUserBooking(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 4. If cancellation happened earlier than 24 hours before departure, create refund request
+	if scheduleIDStr != "" {
+		scheduleID, err := uuid.Parse(scheduleIDStr)
+		if err == nil {
+			var depDateStr, depTimeStr string
+			err = h.db.QueryRow(r.Context(), `SELECT departure_date::text, departure_time::text FROM schedules WHERE id = $1`, scheduleID).Scan(&depDateStr, &depTimeStr)
+			if err == nil {
+				// combine and parse departure datetime
+				dtStr := depDateStr + " " + depTimeStr
+				var depTime time.Time
+				depTime, err = time.Parse("2006-01-02 15:04:05", dtStr)
+				if err != nil {
+					depTime, err = time.Parse("2006-01-02 15:04", dtStr)
+				}
+				if err == nil {
+					if time.Until(depTime) >= 24*time.Hour {
+						// create refund request (PENDING)
+						_, _ = h.db.Exec(r.Context(), `
+							INSERT INTO refund_requests (booking_id, user_id, refundable_amount)
+							VALUES ($1, $2, $3)
+						`, bookingID, userID, fare)
+					}
+				}
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
 		"message": "Booking cancelled successfully. Released seat segment back to inventory.",
 	})
 }
 
 // ─── Segment Waitlisting Engine ──────────────────────────────────────────────
+
+// POST /api/v1/user/bookings/{id}/reschedule
+func (h *Handler) CreateRescheduleRequest(w http.ResponseWriter, r *http.Request) {
+	userID, err := getUserIDFromCtx(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "Not authenticated")
+		return
+	}
+
+	bookingID := chi.URLParam(r, "id")
+	// verify ownership
+	var exists bool
+	err = h.db.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM bookings WHERE id = $1 AND user_id = $2)`, bookingID, userID).Scan(&exists)
+	if err != nil || !exists {
+		writeError(w, http.StatusNotFound, "Booking not found or not owned by user")
+		return
+	}
+
+	var req struct {
+		NewScheduleID     string `json:"new_schedule_id"`
+		NewStartStationID string `json:"new_start_station_id"`
+		NewEndStationID   string `json:"new_end_station_id"`
+		NewSeatID         string `json:"new_seat_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request payload")
+		return
+	}
+
+	// insert reschedule request
+	_, err = h.db.Exec(r.Context(), `
+		INSERT INTO reschedule_requests (booking_id, user_id, new_schedule_id, new_start_station_id, new_end_station_id, new_seat_id)
+		VALUES ($1, $2, NULLIF($3,''), NULLIF($4,''), NULLIF($5,''), NULLIF($6,''))
+	`, bookingID, userID, req.NewScheduleID, req.NewStartStationID, req.NewEndStationID, req.NewSeatID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to create reschedule request: "+err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"message": "Reschedule request submitted and pending admin review"})
+}
 
 // POST /api/v1/waitlists/join
 func (h *Handler) JoinWaitlist(w http.ResponseWriter, r *http.Request) {

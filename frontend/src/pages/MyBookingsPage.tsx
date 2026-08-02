@@ -213,6 +213,23 @@ export default function MyBookingsPage() {
                             >
                               <Ban size={14} /> Cancel
                             </button>
+                            <button
+                              onClick={async () => {
+                                const newScheduleId = prompt('Enter new schedule ID (optional)') || ''
+                                const newStartId = prompt('Enter new start station ID (optional)') || ''
+                                const newEndId = prompt('Enter new end station ID (optional)') || ''
+                                const newSeatId = prompt('Enter new seat ID (optional)') || ''
+                                if(!newScheduleId && !newStartId && !newEndId && !newSeatId) return
+                                try{
+                                  const res = await (await import('../services/api')).createRescheduleRequest(b.id, { new_schedule_id: newScheduleId, new_start_station_id: newStartId, new_end_station_id: newEndId, new_seat_id: newSeatId })
+                                  setMsg({ type: 'success', text: 'Reschedule request submitted' })
+                                  setTimeout(() => setMsg(null), 4000)
+                                }catch(err:any){ setMsg({ type: 'error', text: err.message || 'Failed to submit reschedule request' }) }
+                              }}
+                              className="bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors flex-1 sm:flex-initial"
+                            >
+                              Reschedule
+                            </button>
                           </div>
                         )}
 
