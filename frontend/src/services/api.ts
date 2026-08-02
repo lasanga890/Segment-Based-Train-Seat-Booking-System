@@ -325,9 +325,9 @@ export const adminRemoveCoach = async (id: string) => {
 // Admin Schedule types & APIs
 export interface AdminSchedule {
   id: string; train_id: string; train_name: string; train_number: string;
-  direction: string; departure_date: string; departure_time: string; is_active: boolean;
+  direction: string; departure_date: string; departure_time: string; is_active: boolean; cancel_reason?: string;
 }
-export const adminCreateSchedule = async (data: {train_id:string, departure_date:string, departure_time:string}) => {
+export const adminCreateSchedule = async (data: {train_id:string, start_date:string, end_date:string, departure_time:string}) => {
   const res = await fetch(`${BASE_URL}/admin/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to create schedule')
   return res.json()
@@ -337,9 +337,13 @@ export const adminUpdateSchedule = async (id: string, data: {departure_date?:str
   if (!res.ok) throw new Error('Failed to update schedule')
   return res.json()
 }
-export const adminCancelSchedule = async (id: string) => {
-  const res = await fetch(`${BASE_URL}/admin/schedules/${id}/cancel`, { method: 'PATCH' })
-  if (!res.ok) throw new Error('Failed to cancel schedule')
+export const adminToggleScheduleStatus = async (id: string, is_active: boolean, reason?: string) => {
+  const res = await fetch(`${BASE_URL}/admin/schedules/${id}/status`, { 
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ is_active, reason })
+  })
+  if (!res.ok) throw new Error('Failed to update schedule status')
   return res.json()
 }
 export const adminListSchedules = async (params?: {date_from?:string, date_to?:string, direction?:string}): Promise<AdminSchedule[]> => {

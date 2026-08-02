@@ -331,7 +331,7 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT s.id::text, s.train_id::text, t.name, t.train_number, t.direction,
-		s.departure_date::text, s.departure_time::text, s.is_active
+		s.departure_date::text, s.departure_time::text, s.is_active, s.cancel_reason
 		FROM schedules s JOIN trains t ON t.id = s.train_id
 		WHERE ` + joinConditions(conditions) + ` ORDER BY s.departure_date DESC, s.departure_time ASC`
 	rows, err := h.db.Query(r.Context(), query, args...)
@@ -341,20 +341,21 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 	type scheduleRow struct {
-		ID            string `json:"id"`
-		TrainID       string `json:"train_id"`
-		TrainName     string `json:"train_name"`
-		TrainNumber   string `json:"train_number"`
-		Direction     string `json:"direction"`
-		DepartureDate string `json:"departure_date"`
-		DepartureTime string `json:"departure_time"`
-		IsActive      bool   `json:"is_active"`
+		ID            string  `json:"id"`
+		TrainID       string  `json:"train_id"`
+		TrainName     string  `json:"train_name"`
+		TrainNumber   string  `json:"train_number"`
+		Direction     string  `json:"direction"`
+		DepartureDate string  `json:"departure_date"`
+		DepartureTime string  `json:"departure_time"`
+		IsActive      bool    `json:"is_active"`
+		CancelReason  *string `json:"cancel_reason"`
 	}
 	list := []scheduleRow{}
 	for rows.Next() {
 		var s scheduleRow
-		if err := rows.Scan(&s.ID, &s.TrainID, &s.TrainName, &s.TrainNumber, &s.Direction, &s.DepartureDate, &s.DepartureTime, &s.IsActive); err != nil {
-			writeError(w, http.StatusInternalServerError, "Failed to read schedules")
+		if err := rows.Scan(&s.ID, &s.TrainID, &s.TrainName, &s.TrainNumber, &s.Direction, &s.DepartureDate, &s.DepartureTime, &s.IsActive, &s.CancelReason); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error")
 			return
 		}
 		list = append(list, s)
@@ -369,32 +370,60 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TrainID       string `json:"train_id"`
-		DepartureDate string `json:"departure_date"`
+		StartDate     string `json:"start_date"`
+		EndDate       string `json:"end_date"`
 		DepartureTime string `json:"departure_time"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	date, err := parseScheduleDate(req.DepartureDate)
-	if err != nil || date.Before(todayUTC()) {
-		writeError(w, http.StatusBadRequest, "departure_date must be today or later in YYYY-MM-DD format")
+	startDate, err1 := parseScheduleDate(req.StartDate)
+	endDate, err2 := parseScheduleDate(req.EndDate)
+	
+	if err1 != nil || err2 != nil || startDate.Before(todayUTC()) || endDate.Before(startDate) {
+		writeError(w, http.StatusBadRequest, "start_date and end_date must be valid YYYY-MM-DD dates, today or later, and end_date must not be before start_date")
 		return
 	}
 	if _, err := time.Parse("15:04", req.DepartureTime); err != nil {
 		writeError(w, http.StatusBadRequest, "departure_time must be HH:MM")
 		return
 	}
-	var id string
-	err = h.db.QueryRow(r.Context(), `
-		INSERT INTO schedules (train_id, departure_date, departure_time)
-		VALUES ($1, $2, $3) RETURNING id
-	`, req.TrainID, req.DepartureDate, req.DepartureTime).Scan(&id)
-	if err != nil {
-		writeError(w, http.StatusConflict, "Unable to create schedule. A schedule may already exist for this train and date.")
+
+	// Calculate number of days
+	days := int(endDate.Sub(startDate).Hours()/24) + 1
+	if days > 90 {
+		writeError(w, http.StatusBadRequest, "Date range cannot exceed 90 days")
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"id": id})
+
+	tx, err := h.db.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to start transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	for i := 0; i < days; i++ {
+		currentDate := startDate.AddDate(0, 0, i)
+		dateStr := currentDate.Format("2006-01-02")
+		_, err := tx.Exec(r.Context(), `
+			INSERT INTO schedules (train_id, departure_date, departure_time)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (train_id, departure_date) DO NOTHING
+		`, req.TrainID, dateStr, req.DepartureTime)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Database error during schedule creation")
+			return
+		}
+	}
+	
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to commit schedules")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{"status": "success", "message": "Schedules created successfully"})
 }
 
 func (h *Handler) UpdateSchedule(w http.ResponseWriter, r *http.Request) {
@@ -437,14 +466,33 @@ func joinConditions(conditions []string) string {
 	return result
 }
 
-func (h *Handler) CancelSchedule(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ToggleScheduleStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	_, err := h.db.Exec(r.Context(), `UPDATE schedules SET is_active = false WHERE id = $1`, id)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to cancel schedule")
+	var req struct {
+		IsActive bool   `json:"is_active"`
+		Reason   string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
+
+	var reason *string
+	if !req.IsActive && req.Reason != "" {
+		reason = &req.Reason
+	}
+
+	_, err := h.db.Exec(r.Context(), `
+		UPDATE schedules 
+		SET is_active = $1, cancel_reason = $2 
+		WHERE id = $3
+	`, req.IsActive, reason, id)
+	
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to update schedule status")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
 // ─── Booking Operations ───────────────────────────────────────────────────────

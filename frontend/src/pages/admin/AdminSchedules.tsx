@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { adminListSchedules, adminCreateSchedule, adminCancelSchedule, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
-import { Plus, X, Search, Clock, Ban } from 'lucide-react'
+import { adminListSchedules, adminCreateSchedule, adminToggleScheduleStatus, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
+import { Plus, X, Search, Clock, Ban, CheckCircle } from 'lucide-react'
 
 export default function AdminSchedules() {
   const [schedules, setSchedules] = useState<AdminSchedule[]>([])
@@ -14,11 +14,15 @@ export default function AdminSchedules() {
   const [search, setSearch] = useState('')
 
   const [modalOpen, setModalOpen] = useState(false)
+  const [toggleModalOpen, setToggleModalOpen] = useState(false)
+  const [selectedSchedule, setSelectedSchedule] = useState<AdminSchedule | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
   const [trains, setTrains] = useState<AdminTrain[]>([])
   
   // form
   const [fTrain, setFTrain] = useState('')
-  const [fDate, setFDate] = useState('')
+  const [fStartDate, setFStartDate] = useState('')
+  const [fEndDate, setFEndDate] = useState('')
   const [fTime, setFTime] = useState('')
 
   const loadSchedules = async () => {
@@ -43,7 +47,8 @@ export default function AdminSchedules() {
       const ts = await adminListTrains()
       setTrains(ts)
       if(ts.length > 0) setFTrain(ts[0].id)
-      setFDate(new Date().toISOString().slice(0, 10))
+      setFStartDate(new Date().toISOString().slice(0, 10))
+      setFEndDate(new Date().toISOString().slice(0, 10))
       setFTime('')
       setModalOpen(true)
     } catch(e) { alert('Failed to load trains') }
@@ -52,19 +57,28 @@ export default function AdminSchedules() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await adminCreateSchedule({ train_id: fTrain, departure_date: fDate, departure_time: fTime })
+      await adminCreateSchedule({ train_id: fTrain, start_date: fStartDate, end_date: fEndDate, departure_time: fTime })
       setModalOpen(false)
       loadSchedules()
     } catch (e) { alert(e instanceof Error ? e.message : 'Failed to create schedule') }
   }
 
-  const handleCancel = async (id: string) => {
-    if(confirm('Are you sure you want to cancel this schedule?')) {
-      try {
-        await adminCancelSchedule(id)
-        loadSchedules()
-      } catch (e) { alert('Failed') }
-    }
+  const openToggleModal = (s: AdminSchedule) => {
+    setSelectedSchedule(s)
+    setCancelReason(s.cancel_reason || '')
+    setToggleModalOpen(true)
+  }
+
+  const submitToggle = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedSchedule) return
+    try {
+      // If currently active, we are cancelling (setting is_active = false) with reason
+      // If currently cancelled, we are reactivating (setting is_active = true) without reason
+      await adminToggleScheduleStatus(selectedSchedule.id, !selectedSchedule.is_active, cancelReason)
+      setToggleModalOpen(false)
+      loadSchedules()
+    } catch (e) { alert('Failed to change status') }
   }
 
   const filtered = schedules.filter(s => s.train_name?.toLowerCase().includes(search.toLowerCase()) || s.train_number?.includes(search))
@@ -136,14 +150,23 @@ export default function AdminSchedules() {
                       <Clock size={12}/> {s.departure_time}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`text-xs px-2 py-1 rounded-md font-medium ${s.is_active ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-400'}`}>
-                        {s.is_active ? 'Active' : 'Cancelled'}
-                      </span>
+                      {s.is_active ? (
+                        <span className="text-xs px-2 py-1 rounded-md font-medium bg-green-500/20 text-green-400">Active</span>
+                      ) : (
+                        <div>
+                          <span className="text-xs px-2 py-1 rounded-md font-medium bg-slate-700 text-slate-400">Cancelled</span>
+                          {s.cancel_reason && <p className="text-[10px] text-slate-500 mt-1 max-w-[120px] truncate" title={s.cancel_reason}>{s.cancel_reason}</p>}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
-                      {s.is_active && (
-                        <button onClick={() => handleCancel(s.id)} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-xs">
-                          <Ban size={14}/> Cancel
+                      {s.is_active ? (
+                        <button onClick={() => openToggleModal(s)} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-xs">
+                          <Ban size={14}/> Stop
+                        </button>
+                      ) : (
+                        <button onClick={() => openToggleModal(s)} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 text-xs">
+                          <CheckCircle size={14}/> Reactivate
                         </button>
                       )}
                     </td>
@@ -173,10 +196,15 @@ export default function AdminSchedules() {
                 </div>
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Date</label>
-                    <input required type="date" min={new Date().toISOString().slice(0, 10)} className="input-field" value={fDate} onChange={e => setFDate(e.target.value)} />
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Start Date</label>
+                    <input required type="date" min={new Date().toISOString().slice(0, 10)} className="input-field" value={fStartDate} onChange={e => setFStartDate(e.target.value)} />
                   </div>
                   <div className="flex-1">
+                    <label className="block text-xs font-medium text-slate-400 mb-1">End Date</label>
+                    <input required type="date" min={fStartDate || new Date().toISOString().slice(0, 10)} className="input-field" value={fEndDate} onChange={e => setFEndDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex-1">
                     <label className="block text-xs font-medium text-slate-400 mb-1">Departure Time</label>
                     <input required type="time" className="input-field" value={fTime} onChange={e => setFTime(e.target.value)} />
                   </div>
@@ -184,6 +212,35 @@ export default function AdminSchedules() {
                 <div className="flex justify-end gap-3 mt-6">
                   <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>
                   <button type="submit" className="btn-primary">Create Schedule</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+        
+        {/* Toggle Status Modal */}
+        {toggleModalOpen && selectedSchedule && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="glass-card p-6 w-full max-w-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-white">{selectedSchedule.is_active ? 'Cancel Schedule' : 'Reactivate Schedule'}</h3>
+                <button onClick={() => setToggleModalOpen(false)} className="text-slate-400 hover:text-white"><X size={20} /></button>
+              </div>
+              <form onSubmit={submitToggle} className="space-y-4">
+                <p className="text-sm text-slate-300">
+                  Are you sure you want to {selectedSchedule.is_active ? 'cancel' : 'reactivate'} the schedule for <strong>{selectedSchedule.train_name}</strong> on <strong>{selectedSchedule.departure_date}</strong>?
+                </p>
+                {selectedSchedule.is_active && (
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Reason for Cancellation (Optional)</label>
+                    <input type="text" placeholder="e.g., Track maintenance, Weather" className="input-field" value={cancelReason} onChange={e => setCancelReason(e.target.value)} />
+                  </div>
+                )}
+                <div className="flex justify-end gap-3 mt-6">
+                  <button type="button" onClick={() => setToggleModalOpen(false)} className="btn-secondary">Close</button>
+                  <button type="submit" className={selectedSchedule.is_active ? "btn-primary bg-red-600 hover:bg-red-500" : "btn-primary bg-emerald-600 hover:bg-emerald-500"}>
+                    {selectedSchedule.is_active ? 'Confirm Cancel' : 'Confirm Reactivate'}
+                  </button>
                 </div>
               </form>
             </motion.div>
