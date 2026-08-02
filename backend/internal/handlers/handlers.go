@@ -39,6 +39,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 
 		// Schedules
 		r.Get("/schedules", h.ListSchedules)
+		r.Get("/trains", h.ListTrains)
 		r.Get("/schedules/{scheduleId}/coaches", h.ListScheduleCoaches)
 
 		// Seat availability for a given leg
@@ -73,6 +74,10 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 
 			r.Get("/bookings", h.GetUserBookings)
 			r.Patch("/bookings/{id}/cancel", h.CancelUserBooking)
+			r.Post("/bookings/{id}/reschedule", h.CreateRescheduleRequest)
+
+			r.Get("/refund-requests", h.GetUserRefundRequests)
+			r.Get("/reschedule-requests", h.GetUserRescheduleRequests)
 
 			r.Get("/waitlists", h.GetUserWaitlists)
 
@@ -118,9 +123,11 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 			// Refund & Reschedule Requests
 			r.Get("/refund-requests", h.ListRefundRequests)
 			r.Patch("/refund-requests/{id}/approve", h.ApproveRefundRequest)
+			r.Patch("/refund-requests/{id}/reject", h.RejectRefundRequest)
 
 			r.Get("/reschedule-requests", h.ListRescheduleRequests)
 			r.Patch("/reschedule-requests/{id}/approve", h.ApproveRescheduleRequest)
+			r.Patch("/reschedule-requests/{id}/reject", h.RejectRescheduleRequest)
 
 			// Analytics
 			r.Get("/analytics/segments", h.GetSegmentAnalytics)

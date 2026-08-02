@@ -104,7 +104,7 @@ export default function AdminLayout() {
         </NavLink>
 
         <NavLink
-          to="/admin/reschedules"
+          to="/admin/requests"
           className={({ isActive }) =>
             `flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm transition-colors ${
               isActive
@@ -113,8 +113,8 @@ export default function AdminLayout() {
             }`
           }
         >
-          <Train size={15} />
-          Reschedule Requests
+          <Inbox size={15} />
+          Passenger Requests
         </NavLink>
 
         <NavLink

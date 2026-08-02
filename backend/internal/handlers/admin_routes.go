@@ -798,21 +798,49 @@ func (h *Handler) ApproveRefundRequest(w http.ResponseWriter, r *http.Request) {
 	var req struct { AdminNote string `json:"admin_note"` }
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	_, err := h.db.Exec(r.Context(), `UPDATE refund_requests SET status = 'APPROVED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
+	tx, err := h.db.Begin(r.Context())
+	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to start transaction"); return }
+	defer tx.Rollback(r.Context())
+
+	var bookingID string
+	err = tx.QueryRow(r.Context(), `SELECT booking_id::text FROM refund_requests WHERE id = $1`, id).Scan(&bookingID)
+	if err != nil { writeError(w, http.StatusNotFound, "Refund request not found"); return }
+
+	_, err = tx.Exec(r.Context(), `UPDATE refund_requests SET status = 'APPROVED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
+	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to approve refund request: "+err.Error()); return }
+
+	_, err = tx.Exec(r.Context(), `UPDATE bookings SET status = 'CANCELLED' WHERE id = $1`, bookingID)
+	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to cancel refunded booking: "+err.Error()); return }
+
+	if err := tx.Commit(r.Context()); err != nil { writeError(w, http.StatusInternalServerError, "Failed to commit transaction"); return }
+	writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+}
+
+func (h *Handler) RejectRefundRequest(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct { AdminNote string `json:"admin_note"` }
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	_, err := h.db.Exec(r.Context(), `UPDATE refund_requests SET status = 'REJECTED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to approve refund request: "+err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to reject refund request: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
 }
 
 func (h *Handler) ListRescheduleRequests(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
 		SELECT rr.id::text, rr.booking_id::text, rr.user_id::text, rr.requested_at::text, rr.new_schedule_id::text, rr.new_start_station_id::text, rr.new_end_station_id::text, rr.new_seat_id::text, rr.status, rr.admin_note, rr.decided_at::text,
-			b.passenger_name, sch.departure_date::text, sch.departure_time::text
+			b.passenger_name, sch.departure_date::text, sch.departure_time::text,
+			COALESCE(ns.name, '') as new_start_name, COALESCE(ne.name, '') as new_end_name,
+			COALESCE(nsch.departure_date::text, '') as new_departure_date, COALESCE(nsch.departure_time::text, '') as new_departure_time
 		FROM reschedule_requests rr
 		JOIN bookings b ON b.id = rr.booking_id
 		LEFT JOIN schedules sch ON sch.id = b.schedule_id
+		LEFT JOIN stations ns ON ns.id = rr.new_start_station_id
+		LEFT JOIN stations ne ON ne.id = rr.new_end_station_id
+		LEFT JOIN schedules nsch ON nsch.id = rr.new_schedule_id
 		ORDER BY rr.requested_at DESC
 	`)
 	if err != nil {
@@ -836,13 +864,23 @@ func (h *Handler) ListRescheduleRequests(w http.ResponseWriter, r *http.Request)
 		PassengerName     string  `json:"passenger_name"`
 		DepartureDate     *string `json:"departure_date"`
 		DepartureTime     *string `json:"departure_time"`
+		NewStartName      string  `json:"new_start_name"`
+		NewEndName        string  `json:"new_end_name"`
+		NewDepartureDate  string  `json:"new_departure_date"`
+		NewDepartureTime  string  `json:"new_departure_time"`
 	}
 
 	var list []rrow
 	for rows.Next() {
 		var it rrow
 		var decAt, depDate, depTime interface{}
-		if err := rows.Scan(&it.ID, &it.BookingID, &it.UserID, &it.RequestedAt, &it.NewScheduleID, &it.NewStartStationID, &it.NewEndStationID, &it.NewSeatID, &it.Status, &it.AdminNote, &decAt, &it.PassengerName, &depDate, &depTime); err != nil {
+		if err := rows.Scan(
+			&it.ID, &it.BookingID, &it.UserID, &it.RequestedAt,
+			&it.NewScheduleID, &it.NewStartStationID, &it.NewEndStationID, &it.NewSeatID,
+			&it.Status, &it.AdminNote, &decAt,
+			&it.PassengerName, &depDate, &depTime,
+			&it.NewStartName, &it.NewEndName, &it.NewDepartureDate, &it.NewDepartureTime,
+		); err != nil {
 			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
@@ -903,4 +941,17 @@ func (h *Handler) ApproveRescheduleRequest(w http.ResponseWriter, r *http.Reques
 	if err := tx.Commit(r.Context()); err != nil { writeError(w, http.StatusInternalServerError, "Failed to commit changes"); return }
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
+}
+
+func (h *Handler) RejectRescheduleRequest(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var req struct { AdminNote string `json:"admin_note"` }
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	_, err := h.db.Exec(r.Context(), `UPDATE reschedule_requests SET status = 'REJECTED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to reject reschedule request: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
 }

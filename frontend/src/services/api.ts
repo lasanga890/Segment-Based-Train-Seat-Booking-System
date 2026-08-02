@@ -303,6 +303,12 @@ export interface AdminCoach {
   coach_type: 'RESERVED'|'UNRESERVED'; coach_class: string;
   total_seats: number; label: string; booked_seats?: number;
 }
+export const getPublicTrains = async (): Promise<AdminTrain[]> => {
+  const res = await fetch(`${BASE_URL}/trains`)
+  if (!res.ok) throw new Error('Failed to fetch trains')
+  return res.json()
+}
+
 export const adminGetTrains = async (): Promise<AdminTrain[]> => {
   const res = await authFetch(`${BASE_URL}/admin/trains`)
   if (!res.ok) throw new Error('Failed to fetch trains')
@@ -360,6 +366,15 @@ export const adminApproveRefundRequest = async (id: string, adminNote?: string) 
   return res.json()
 }
 
+export const adminRejectRefundRequest = async (id: string, adminNote?: string) => {
+  const res = await authFetch(`${BASE_URL}/admin/refund-requests/${id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_note: adminNote || '' }) })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to reject refund request')
+  }
+  return res.json()
+}
+
 export const adminGetRescheduleRequests = async () => {
   const res = await authFetch(`${BASE_URL}/admin/reschedule-requests`)
   if (!res.ok) throw new Error('Failed to fetch reschedule requests')
@@ -372,6 +387,27 @@ export const adminApproveRescheduleRequest = async (id: string, adminNote?: stri
     const err = await res.json()
     throw new Error(err.error || 'Failed to approve reschedule request')
   }
+  return res.json()
+}
+
+export const adminRejectRescheduleRequest = async (id: string, adminNote?: string) => {
+  const res = await authFetch(`${BASE_URL}/admin/reschedule-requests/${id}/reject`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ admin_note: adminNote || '' }) })
+  if (!res.ok) {
+    const err = await res.json()
+    throw new Error(err.error || 'Failed to reject reschedule request')
+  }
+  return res.json()
+}
+
+export const getUserRefundRequests = async () => {
+  const res = await authFetch(`${BASE_URL}/user/refund-requests`)
+  if (!res.ok) throw new Error('Failed to fetch user refund requests')
+  return res.json()
+}
+
+export const getUserRescheduleRequests = async () => {
+  const res = await authFetch(`${BASE_URL}/user/reschedule-requests`)
+  if (!res.ok) throw new Error('Failed to fetch user reschedule requests')
   return res.json()
 }
 export const adminAddCoach = async (trainId: string, data: Omit<AdminCoach,'id'|'train_id'>) => {
