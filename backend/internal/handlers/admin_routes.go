@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // ─── Station CRUD ─────────────────────────────────────────────────────────────
@@ -331,7 +332,7 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query := `SELECT s.id::text, s.train_id::text, t.name, t.train_number, t.direction,
-		s.departure_date::text, s.departure_time::text, s.is_active, s.cancel_reason
+		s.departure_date::text, s.departure_time::text, s.is_active, s.cancel_reason, s.batch_id::text
 		FROM schedules s JOIN trains t ON t.id = s.train_id
 		WHERE ` + joinConditions(conditions) + ` ORDER BY s.departure_date DESC, s.departure_time ASC`
 	rows, err := h.db.Query(r.Context(), query, args...)
@@ -350,11 +351,12 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 		DepartureTime string  `json:"departure_time"`
 		IsActive      bool    `json:"is_active"`
 		CancelReason  *string `json:"cancel_reason"`
+		BatchID       *string `json:"batch_id"`
 	}
 	list := []scheduleRow{}
 	for rows.Next() {
 		var s scheduleRow
-		if err := rows.Scan(&s.ID, &s.TrainID, &s.TrainName, &s.TrainNumber, &s.Direction, &s.DepartureDate, &s.DepartureTime, &s.IsActive, &s.CancelReason); err != nil {
+		if err := rows.Scan(&s.ID, &s.TrainID, &s.TrainName, &s.TrainNumber, &s.Direction, &s.DepartureDate, &s.DepartureTime, &s.IsActive, &s.CancelReason, &s.BatchID); err != nil {
 			writeError(w, http.StatusInternalServerError, "Scan error")
 			return
 		}
@@ -397,6 +399,12 @@ func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var batchID *string
+	if days > 1 {
+		bID := uuid.New().String()
+		batchID = &bID
+	}
+
 	tx, err := h.db.Begin(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to start transaction")
@@ -408,10 +416,10 @@ func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 		currentDate := startDate.AddDate(0, 0, i)
 		dateStr := currentDate.Format("2006-01-02")
 		_, err := tx.Exec(r.Context(), `
-			INSERT INTO schedules (train_id, departure_date, departure_time)
-			VALUES ($1, $2, $3)
+			INSERT INTO schedules (train_id, departure_date, departure_time, batch_id)
+			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (train_id, departure_date) DO NOTHING
-		`, req.TrainID, dateStr, req.DepartureTime)
+		`, req.TrainID, dateStr, req.DepartureTime, batchID)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "Database error during schedule creation")
 			return

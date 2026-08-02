@@ -325,7 +325,7 @@ export const adminRemoveCoach = async (id: string) => {
 // Admin Schedule types & APIs
 export interface AdminSchedule {
   id: string; train_id: string; train_name: string; train_number: string;
-  direction: string; departure_date: string; departure_time: string; is_active: boolean; cancel_reason?: string;
+  direction: string; departure_date: string; departure_time: string; is_active: boolean; cancel_reason?: string; batch_id?: string;
 }
 export const adminCreateSchedule = async (data: {train_id:string, start_date:string, end_date:string, departure_time:string}) => {
   const res = await fetch(`${BASE_URL}/admin/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })

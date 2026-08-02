@@ -1,7 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { adminListSchedules, adminCreateSchedule, adminToggleScheduleStatus, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
-import { Plus, X, Search, Clock, Ban, CheckCircle } from 'lucide-react'
+import { Plus, X, Search, Clock, Ban, CheckCircle, ChevronDown, ChevronRight, Layers, Calendar } from 'lucide-react'
+
+interface ScheduleGroup {
+  id: string
+  type: 'single' | 'batch'
+  batchId?: string
+  trainName: string
+  trainNumber: string
+  direction: string
+  departureTime: string
+  startDate: string
+  endDate: string
+  totalCount: number
+  activeCount: number
+  cancelledCount: number
+  schedules: AdminSchedule[]
+}
 
 export default function AdminSchedules() {
   const [schedules, setSchedules] = useState<AdminSchedule[]>([])
@@ -21,9 +37,13 @@ export default function AdminSchedules() {
   
   // form
   const [fTrain, setFTrain] = useState('')
+  const [isSingleDay, setIsSingleDay] = useState(false)
   const [fStartDate, setFStartDate] = useState('')
   const [fEndDate, setFEndDate] = useState('')
   const [fTime, setFTime] = useState('')
+
+  // expanded batch rows
+  const [expandedBatches, setExpandedBatches] = useState<Record<string, boolean>>({})
 
   const loadSchedules = async () => {
     try {
@@ -47,8 +67,10 @@ export default function AdminSchedules() {
       const ts = await adminListTrains()
       setTrains(ts)
       if(ts.length > 0) setFTrain(ts[0].id)
-      setFStartDate(new Date().toISOString().slice(0, 10))
-      setFEndDate(new Date().toISOString().slice(0, 10))
+      const today = new Date().toISOString().slice(0, 10)
+      setFStartDate(today)
+      setFEndDate(today)
+      setIsSingleDay(false)
       setFTime('')
       setModalOpen(true)
     } catch(e) { alert('Failed to load trains') }
@@ -57,7 +79,13 @@ export default function AdminSchedules() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await adminCreateSchedule({ train_id: fTrain, start_date: fStartDate, end_date: fEndDate, departure_time: fTime })
+      const finalEndDate = isSingleDay ? fStartDate : fEndDate
+      await adminCreateSchedule({ 
+        train_id: fTrain, 
+        start_date: fStartDate, 
+        end_date: finalEndDate, 
+        departure_time: fTime 
+      })
       setModalOpen(false)
       loadSchedules()
     } catch (e) { alert(e instanceof Error ? e.message : 'Failed to create schedule') }
@@ -73,15 +101,92 @@ export default function AdminSchedules() {
     e.preventDefault()
     if (!selectedSchedule) return
     try {
-      // If currently active, we are cancelling (setting is_active = false) with reason
-      // If currently cancelled, we are reactivating (setting is_active = true) without reason
       await adminToggleScheduleStatus(selectedSchedule.id, !selectedSchedule.is_active, cancelReason)
       setToggleModalOpen(false)
       loadSchedules()
     } catch (e) { alert('Failed to change status') }
   }
 
-  const filtered = schedules.filter(s => s.train_name?.toLowerCase().includes(search.toLowerCase()) || s.train_number?.includes(search))
+  const toggleBatchExpand = (batchId: string) => {
+    setExpandedBatches(prev => ({ ...prev, [batchId]: !prev[batchId] }))
+  }
+
+  const filtered = useMemo(() => {
+    return schedules.filter(s => s.train_name?.toLowerCase().includes(search.toLowerCase()) || s.train_number?.includes(search))
+  }, [schedules, search])
+
+  // Group schedules by batch_id
+  const scheduleGroups = useMemo(() => {
+    const batchMap = new Map<string, AdminSchedule[]>()
+    const singleItems: AdminSchedule[] = []
+
+    filtered.forEach(s => {
+      if (s.batch_id) {
+        if (!batchMap.has(s.batch_id)) {
+          batchMap.set(s.batch_id, [])
+        }
+        batchMap.get(s.batch_id)!.push(s)
+      } else {
+        singleItems.push(s)
+      }
+    })
+
+    const groups: ScheduleGroup[] = []
+
+    // Add batch groups
+    batchMap.forEach((batchSchedules, batchId) => {
+      if (batchSchedules.length > 1) {
+        // Sort by date ASC
+        batchSchedules.sort((a, b) => a.departure_date.localeCompare(b.departure_date))
+        const first = batchSchedules[0]
+        const last = batchSchedules[batchSchedules.length - 1]
+        const activeCount = batchSchedules.filter(s => s.is_active).length
+        const cancelledCount = batchSchedules.length - activeCount
+
+        groups.push({
+          id: `batch-${batchId}`,
+          type: 'batch',
+          batchId,
+          trainName: first.train_name,
+          trainNumber: first.train_number,
+          direction: first.direction,
+          departureTime: first.departure_time,
+          startDate: first.departure_date,
+          endDate: last.departure_date,
+          totalCount: batchSchedules.length,
+          activeCount,
+          cancelledCount,
+          schedules: batchSchedules
+        })
+      } else {
+        // Single schedule even if batch_id is present
+        batchSchedules.forEach(s => singleItems.push(s))
+      }
+    })
+
+    // Add single items
+    singleItems.forEach(s => {
+      groups.push({
+        id: `single-${s.id}`,
+        type: 'single',
+        trainName: s.train_name,
+        trainNumber: s.train_number,
+        direction: s.direction,
+        departureTime: s.departure_time,
+        startDate: s.departure_date,
+        endDate: s.departure_date,
+        totalCount: 1,
+        activeCount: s.is_active ? 1 : 0,
+        cancelledCount: s.is_active ? 0 : 1,
+        schedules: [s]
+      })
+    })
+
+    // Sort groups by start date DESC
+    groups.sort((a, b) => b.startDate.localeCompare(a.startDate))
+
+    return groups
+  }, [filtered])
 
   return (
     <div>
@@ -122,63 +227,169 @@ export default function AdminSchedules() {
                 <tr className="border-b border-white/5 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="px-4 py-3">Train</th>
                   <th className="px-4 py-3">Direction</th>
-                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Date / Range</th>
                   <th className="px-4 py-3">Dep. Time</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {scheduleGroups.length === 0 ? (
                   <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">No schedules found</td></tr>
-                ) : filtered.map((s, i) => (
-                  <motion.tr
-                    key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i*0.02, 0.2) }}
-                    className={`border-b border-white/5 hover:bg-white/[0.02] ${!s.is_active ? 'opacity-50 line-through' : ''}`}
-                  >
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-slate-200">{s.train_name}</p>
-                      <p className="text-xs text-slate-500">#{s.train_number}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${s.direction === 'UP' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
-                        {s.direction}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-300">{s.departure_date}</td>
-                    <td className="px-4 py-3 text-brand-300 font-mono flex items-center gap-1">
-                      <Clock size={12}/> {s.departure_time}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.is_active ? (
-                        <span className="text-xs px-2 py-1 rounded-md font-medium bg-green-500/20 text-green-400">Active</span>
-                      ) : (
-                        <div>
-                          <span className="text-xs px-2 py-1 rounded-md font-medium bg-slate-700 text-slate-400">Cancelled</span>
-                          {s.cancel_reason && <p className="text-[10px] text-slate-500 mt-1 max-w-[120px] truncate" title={s.cancel_reason}>{s.cancel_reason}</p>}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.is_active ? (
-                        <button onClick={() => openToggleModal(s)} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-xs">
-                          <Ban size={14}/> Stop
-                        </button>
-                      ) : (
-                        <button onClick={() => openToggleModal(s)} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 text-xs">
-                          <CheckCircle size={14}/> Reactivate
-                        </button>
-                      )}
-                    </td>
-                  </motion.tr>
-                ))}
+                ) : scheduleGroups.map((group, i) => {
+                  if (group.type === 'batch' && group.batchId) {
+                    const isExpanded = !!expandedBatches[group.batchId]
+                    return (
+                      <React.Fragment key={group.id}>
+                        {/* Parent Batch Row */}
+                        <motion.tr
+                          initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i*0.02, 0.2) }}
+                          onClick={() => toggleBatchExpand(group.batchId!)}
+                          className="border-b border-white/5 hover:bg-white/[0.04] cursor-pointer bg-white/[0.01]"
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              {isExpanded ? <ChevronDown size={16} className="text-brand-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+                              <div>
+                                <p className="font-medium text-slate-200 flex items-center gap-1.5">
+                                  {group.trainName}
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300 font-normal flex items-center gap-1">
+                                    <Layers size={10} /> Bulk Schedule
+                                  </span>
+                                </p>
+                                <p className="text-xs text-slate-500">#{group.trainNumber}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${group.direction === 'UP' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                              {group.direction}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5 text-slate-200">
+                              <Calendar size={14} className="text-brand-400" />
+                              <span>{group.startDate} <span className="text-slate-500">→</span> {group.endDate}</span>
+                              <span className="text-xs text-slate-400 font-mono">({group.totalCount} days)</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-brand-300 font-mono flex items-center gap-1">
+                            <Clock size={12}/> {group.departureTime}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex gap-1.5 items-center">
+                              {group.activeCount > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded-md font-medium bg-green-500/20 text-green-400">
+                                  {group.activeCount} Active
+                                </span>
+                              )}
+                              {group.cancelledCount > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded-md font-medium bg-red-500/20 text-red-400">
+                                  {group.cancelledCount} Stopped
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button onClick={(e) => { e.stopPropagation(); toggleBatchExpand(group.batchId!) }} className="text-xs text-brand-400 hover:underline">
+                              {isExpanded ? 'Hide Days' : 'View Days'}
+                            </button>
+                          </td>
+                        </motion.tr>
+
+                        {/* Child Sub-rows when Expanded */}
+                        {isExpanded && group.schedules.map((s) => (
+                          <tr key={s.id} className={`border-b border-white/5 bg-slate-900/60 ${!s.is_active ? 'opacity-60' : ''}`}>
+                            <td className="px-4 py-2.5 pl-10 text-xs text-slate-400">
+                              ↳ Single Service Date
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-slate-400">
+                              -
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-slate-200 font-medium">
+                              {s.departure_date}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-brand-300 font-mono">
+                              {s.departure_time}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {s.is_active ? (
+                                <span className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-green-500/20 text-green-400">Active</span>
+                              ) : (
+                                <div>
+                                  <span className="text-[11px] px-2 py-0.5 rounded-md font-medium bg-slate-700 text-slate-400">Cancelled</span>
+                                  {s.cancel_reason && <p className="text-[10px] text-slate-400 mt-0.5" title={s.cancel_reason}>{s.cancel_reason}</p>}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {s.is_active ? (
+                                <button onClick={() => openToggleModal(s)} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-xs">
+                                  <Ban size={12}/> Stop
+                                </button>
+                              ) : (
+                                <button onClick={() => openToggleModal(s)} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 text-xs">
+                                  <CheckCircle size={12}/> Reactivate
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    )
+                  } else {
+                    // Single Schedule Row
+                    const s = group.schedules[0]
+                    return (
+                      <motion.tr
+                        key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i*0.02, 0.2) }}
+                        className={`border-b border-white/5 hover:bg-white/[0.02] ${!s.is_active ? 'opacity-50 line-through' : ''}`}
+                      >
+                        <td className="px-4 py-3">
+                          <p className="font-medium text-slate-200">{s.train_name}</p>
+                          <p className="text-xs text-slate-500">#{s.train_number}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${s.direction === 'UP' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                            {s.direction}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{s.departure_date}</td>
+                        <td className="px-4 py-3 text-brand-300 font-mono flex items-center gap-1">
+                          <Clock size={12}/> {s.departure_time}
+                        </td>
+                        <td className="px-4 py-3">
+                          {s.is_active ? (
+                            <span className="text-xs px-2 py-1 rounded-md font-medium bg-green-500/20 text-green-400">Active</span>
+                          ) : (
+                            <div>
+                              <span className="text-xs px-2 py-1 rounded-md font-medium bg-slate-700 text-slate-400">Cancelled</span>
+                              {s.cancel_reason && <p className="text-[10px] text-slate-500 mt-1 max-w-[120px] truncate" title={s.cancel_reason}>{s.cancel_reason}</p>}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {s.is_active ? (
+                            <button onClick={() => openToggleModal(s)} className="text-red-400 hover:text-red-300 flex items-center gap-1 text-xs">
+                              <Ban size={14}/> Stop
+                            </button>
+                          ) : (
+                            <button onClick={() => openToggleModal(s)} className="text-emerald-400 hover:text-emerald-300 flex items-center gap-1 text-xs">
+                              <CheckCircle size={14}/> Reactivate
+                            </button>
+                          )}
+                        </td>
+                      </motion.tr>
+                    )
+                  }
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* Modal */}
+      {/* Create Modal */}
       <AnimatePresence>
         {modalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -194,16 +405,36 @@ export default function AdminSchedules() {
                     {trains.map(t => <option key={t.id} value={t.id}>{t.name} (#{t.train_number}) - {t.direction}</option>)}
                   </select>
                 </div>
+
+                {/* Single Day Checkbox */}
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    id="singleDayCheck" 
+                    checked={isSingleDay} 
+                    onChange={e => setIsSingleDay(e.target.checked)} 
+                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-brand-500 focus:ring-brand-500" 
+                  />
+                  <label htmlFor="singleDayCheck" className="text-sm text-slate-300 select-none cursor-pointer">
+                    Single Day Schedule (One date only)
+                  </label>
+                </div>
+
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Start Date</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">
+                      {isSingleDay ? 'Date' : 'Start Date'}
+                    </label>
                     <input required type="date" min={new Date().toISOString().slice(0, 10)} className="input-field" value={fStartDate} onChange={e => setFStartDate(e.target.value)} />
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-400 mb-1">End Date</label>
-                    <input required type="date" min={fStartDate || new Date().toISOString().slice(0, 10)} className="input-field" value={fEndDate} onChange={e => setFEndDate(e.target.value)} />
-                  </div>
+                  {!isSingleDay && (
+                    <div className="flex-1">
+                      <label className="block text-xs font-medium text-slate-400 mb-1">End Date</label>
+                      <input required type="date" min={fStartDate || new Date().toISOString().slice(0, 10)} className="input-field" value={fEndDate} onChange={e => setFEndDate(e.target.value)} />
+                    </div>
+                  )}
                 </div>
+
                 <div>
                   <label className="block text-xs font-medium text-slate-400 mb-1">Departure Time</label>
                   <input required type="time" className="input-field" value={fTime} onChange={e => setFTime(e.target.value)} />
