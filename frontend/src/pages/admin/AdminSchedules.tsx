@@ -204,10 +204,9 @@ export default function AdminSchedules() {
                     <input required type="date" min={fStartDate || new Date().toISOString().slice(0, 10)} className="input-field" value={fEndDate} onChange={e => setFEndDate(e.target.value)} />
                   </div>
                 </div>
-                <div className="flex-1">
-                    <label className="block text-xs font-medium text-slate-400 mb-1">Departure Time</label>
-                    <input required type="time" className="input-field" value={fTime} onChange={e => setFTime(e.target.value)} />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Departure Time</label>
+                  <input required type="time" className="input-field" value={fTime} onChange={e => setFTime(e.target.value)} />
                 </div>
                 <div className="flex justify-end gap-3 mt-6">
                   <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>
