@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { adminListSchedules, adminCreateSchedule, adminToggleScheduleStatus, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
+import { adminListSchedulesPaginated, adminCreateSchedule, adminToggleScheduleStatus, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
 import { Plus, X, Search, Clock, Ban, CheckCircle, ChevronDown, ChevronRight, Layers, Calendar } from 'lucide-react'
+import Pagination from '../../components/Pagination'
 
 interface ScheduleGroup {
   id: string
@@ -23,6 +24,12 @@ export default function AdminSchedules() {
   const [schedules, setSchedules] = useState<AdminSchedule[]>([])
   const [loading, setLoading] = useState(true)
   
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
   // filters
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -47,12 +54,17 @@ export default function AdminSchedules() {
 
   const loadSchedules = async () => {
     try {
-      const data = await adminListSchedules({
+      setLoading(true)
+      const res = await adminListSchedulesPaginated({
+        page,
+        limit,
         ...(dateFrom ? { date_from: dateFrom } : {}),
         ...(dateTo ? { date_to: dateTo } : {}),
         ...(dirFilter !== 'ALL' ? { direction: dirFilter } : {})
       })
-      setSchedules(data)
+      setSchedules(res.data)
+      setTotal(res.total)
+      setTotalPages(res.total_pages)
     } catch (e) {
       console.error(e)
     } finally {
@@ -60,7 +72,7 @@ export default function AdminSchedules() {
     }
   }
 
-  useEffect(() => { loadSchedules() }, [dateFrom, dateTo, dirFilter])
+  useEffect(() => { loadSchedules() }, [dateFrom, dateTo, dirFilter, page, limit])
 
   const openCreate = async () => {
     try {
@@ -386,6 +398,14 @@ export default function AdminSchedules() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+          />
         </div>
       )}
 

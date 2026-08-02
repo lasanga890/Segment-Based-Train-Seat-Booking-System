@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -313,6 +314,8 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, dateFrom)
 		conditions = append(conditions, fmt.Sprintf("s.departure_date >= $%d", len(args)))
+	} else {
+		conditions = append(conditions, "(s.departure_date > CURRENT_DATE OR (s.departure_date = CURRENT_DATE AND s.departure_time >= CURRENT_TIME))")
 	}
 	if dateTo != "" {
 		if _, err := parseScheduleDate(dateTo); err != nil {
@@ -329,6 +332,81 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 		}
 		args = append(args, direction)
 		conditions = append(conditions, fmt.Sprintf("t.direction = $%d", len(args)))
+	}
+
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	if pageStr != "" {
+		page, _ := strconv.Atoi(pageStr)
+		if page < 1 {
+			page = 1
+		}
+		limit, _ := strconv.Atoi(limitStr)
+		if limit < 1 {
+			limit = 10
+		}
+
+		var total int
+		countQuery := `SELECT COUNT(*) FROM schedules s JOIN trains t ON t.id = s.train_id WHERE ` + joinConditions(conditions)
+		if err := h.db.QueryRow(r.Context(), countQuery, args...).Scan(&total); err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to count schedules: "+err.Error())
+			return
+		}
+
+		offset := (page - 1) * limit
+		query := fmt.Sprintf(`SELECT s.id::text, s.train_id::text, t.name, t.train_number, t.direction,
+			s.departure_date::text, s.departure_time::text, s.is_active, s.cancel_reason, s.batch_id::text
+			FROM schedules s JOIN trains t ON t.id = s.train_id
+			WHERE %s ORDER BY s.departure_date DESC, s.departure_time ASC
+			LIMIT %d OFFSET %d`, joinConditions(conditions), limit, offset)
+
+		rows, err := h.db.Query(r.Context(), query, args...)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to fetch schedules")
+			return
+		}
+		defer rows.Close()
+
+		type scheduleRow struct {
+			ID            string  `json:"id"`
+			TrainID       string  `json:"train_id"`
+			TrainName     string  `json:"train_name"`
+			TrainNumber   string  `json:"train_number"`
+			Direction     string  `json:"direction"`
+			DepartureDate string  `json:"departure_date"`
+			DepartureTime string  `json:"departure_time"`
+			IsActive      bool    `json:"is_active"`
+			CancelReason  *string `json:"cancel_reason"`
+			BatchID       *string `json:"batch_id"`
+		}
+
+		list := []scheduleRow{}
+		for rows.Next() {
+			var s scheduleRow
+			if err := rows.Scan(&s.ID, &s.TrainID, &s.TrainName, &s.TrainNumber, &s.Direction, &s.DepartureDate, &s.DepartureTime, &s.IsActive, &s.CancelReason, &s.BatchID); err != nil {
+				writeError(w, http.StatusInternalServerError, "Scan error")
+				return
+			}
+			list = append(list, s)
+		}
+		if err := rows.Err(); err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to read schedules")
+			return
+		}
+
+		totalPages := 0
+		if limit > 0 {
+			totalPages = (total + limit - 1) / limit
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"data":        list,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+		return
 	}
 
 	query := `SELECT s.id::text, s.train_id::text, t.name, t.train_number, t.direction,

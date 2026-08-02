@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getStations, adminCreateStation, adminUpdateStation, adminToggleStationStatus, AdminStation } from '../../services/api'
+import { getStationsPaginated, adminCreateStation, adminUpdateStation, adminToggleStationStatus, AdminStation } from '../../services/api'
 import { Edit2, Plus, X, AlertCircle, CheckCircle2 } from 'lucide-react'
+import Pagination from '../../components/Pagination'
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => {
@@ -26,6 +27,12 @@ export default function AdminStations() {
   const [isModalOpen, setModalOpen] = useState(false)
   const [editStation, setEditStation] = useState<AdminStation | null>(null)
   
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
   // form state
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
@@ -36,9 +43,11 @@ export default function AdminStations() {
 
   const loadStations = async () => {
     try {
-      const data = await getStations(true) as unknown as AdminStation[]
-      data.sort((a, b) => a.distance_km - b.distance_km)
-      setStations(data)
+      setLoading(true)
+      const res = await getStationsPaginated({ all: true, page, limit })
+      setStations(res.data)
+      setTotal(res.total)
+      setTotalPages(res.total_pages)
     } catch (e) {
       setToast({ msg: 'Failed to load stations', type: 'error' })
     } finally {
@@ -46,7 +55,7 @@ export default function AdminStations() {
     }
   }
 
-  useEffect(() => { loadStations() }, [])
+  useEffect(() => { loadStations() }, [page, limit])
 
   const openAdd = () => {
     setEditStation(null)
@@ -167,6 +176,14 @@ export default function AdminStations() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+          />
         </div>
       )}
 

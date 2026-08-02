@@ -346,25 +346,29 @@ export const adminToggleScheduleStatus = async (id: string, is_active: boolean, 
   if (!res.ok) throw new Error('Failed to update schedule status')
   return res.json()
 }
-export const adminListSchedules = async (params?: {date_from?:string, date_to?:string, direction?:string}): Promise<AdminSchedule[]> => {
+export interface PaginatedResponse<T> {
+  data: T[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
+export const getStationsPaginated = async (params: { all?: boolean, page: number, limit: number }): Promise<PaginatedResponse<Station>> => {
+  const query = new URLSearchParams(params as any).toString()
+  const res = await fetch(`${BASE_URL}/stations?${query}`)
+  if (!res.ok) throw new Error('Failed to fetch stations')
+  return res.json()
+}
+
+export const adminListSchedulesPaginated = async (params?: {date_from?:string, date_to?:string, direction?:string, page?:number, limit?:number}): Promise<PaginatedResponse<AdminSchedule>> => {
   const query = new URLSearchParams(params as any).toString()
   const res = await fetch(`${BASE_URL}/admin/schedules${query ? `?${query}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch schedules')
   return res.json()
 }
 
-// Admin Booking operations
-export const adminCancelBooking = async (id: string) => {
-  const res = await fetch(`${BASE_URL}/admin/bookings/${id}/cancel`, { method: 'POST' })
-  if (!res.ok) throw new Error('Failed to cancel booking')
-  return res.json()
-}
-export const adminGetSeatOccupancy = async (seatId: string) => {
-  const res = await fetch(`${BASE_URL}/admin/seats/${seatId}/occupancy`)
-  if (!res.ok) throw new Error('Failed to fetch seat occupancy')
-  return res.json()
-}
-export const adminGetAllBookings = async (params?: {status?:string, search?:string, date?:string, train_id?:string, coach_class?:string}): Promise<Booking[]> => {
+export const adminGetAllBookingsPaginated = async (params?: {status?:string, search?:string, date?:string, train_id?:string, coach_class?:string, page?:number, limit?:number}): Promise<PaginatedResponse<Booking>> => {
   const query = new URLSearchParams(params as any).toString()
   const res = await fetch(`${BASE_URL}/admin/bookings${query ? `?${query}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch bookings')

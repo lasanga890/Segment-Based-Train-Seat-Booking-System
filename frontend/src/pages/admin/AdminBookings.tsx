@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { adminGetAllBookings, adminCancelBooking, adminGetTrains, Booking, AdminTrain } from '../../services/api'
+import { adminGetAllBookingsPaginated, adminCancelBooking, adminGetTrains, Booking, AdminTrain } from '../../services/api'
 import { Search, Copy, Ban, CheckCircle2, Inbox, Train } from 'lucide-react'
+import Pagination from '../../components/Pagination'
 
 const statusColors: Record<string, string> = {
   CONFIRMED: 'bg-green-500/20 text-green-400',
@@ -20,6 +21,12 @@ export default function AdminBookings() {
   const [trains, setTrains]     = useState<AdminTrain[]>([])
   const [loading, setLoading]   = useState(true)
   
+  // Pagination state
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
   const [search, setSearch]   = useState('')
   const [statusF, setStatusF] = useState('ALL')
   const [trainF, setTrainF]   = useState('ALL')
@@ -36,19 +43,24 @@ export default function AdminBookings() {
 
   const loadBookings = async () => {
     try {
-      const data = await adminGetAllBookings({
+      setLoading(true)
+      const res = await adminGetAllBookingsPaginated({
+        page,
+        limit,
         ...(search ? { search } : {}),
         ...(statusF !== 'ALL' ? { status: statusF } : {}),
         ...(trainF !== 'ALL' ? { train_id: trainF } : {}),
         ...(classF !== 'ALL' ? { coach_class: classF } : {}),
         ...(dateF ? { date: dateF } : {})
       })
-      setBookings(data)
+      setBookings(res.data)
+      setTotal(res.total)
+      setTotalPages(res.total_pages)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { loadBookings() }, [statusF, trainF, classF, dateF])
+  useEffect(() => { loadBookings() }, [statusF, trainF, classF, dateF, page, limit])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -226,6 +238,14 @@ export default function AdminBookings() {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={page}
+            limit={limit}
+            total={total}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+          />
         </div>
       )}
     </div>

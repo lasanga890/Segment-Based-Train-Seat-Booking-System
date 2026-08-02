@@ -32,6 +32,7 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 		FROM schedules s
 		JOIN trains t ON t.id = s.train_id
 		WHERE s.departure_date = $1 AND t.direction = $2 AND s.is_active = true
+		  AND (s.departure_date > CURRENT_DATE OR (s.departure_date = CURRENT_DATE AND s.departure_time > CURRENT_TIME))
 		ORDER BY s.departure_time ASC
 	`, dateStr, direction)
 	if err != nil {
@@ -63,14 +64,87 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/stations?all=true
 func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
 	allStr := r.URL.Query().Get("all")
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	whereClause := ""
+	if allStr != "true" {
+		whereClause = " WHERE is_active = true"
+	}
+
+	if pageStr != "" {
+		page, _ := strconv.Atoi(pageStr)
+		if page < 1 {
+			page = 1
+		}
+		limit, _ := strconv.Atoi(limitStr)
+		if limit < 1 {
+			limit = 10
+		}
+
+		var total int
+		countQuery := "SELECT COUNT(*) FROM stations" + whereClause
+		if err := h.db.QueryRow(r.Context(), countQuery).Scan(&total); err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to count stations")
+			return
+		}
+
+		offset := (page - 1) * limit
+		query := fmt.Sprintf(`
+			SELECT id, name, code, sequence_order, distance_km, is_active, created_at
+			FROM stations %s
+			ORDER BY distance_km ASC
+			LIMIT %d OFFSET %d
+		`, whereClause, limit, offset)
+
+		rows, err := h.db.Query(r.Context(), query)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to fetch stations")
+			return
+		}
+		defer rows.Close()
+
+		type stationRow struct {
+			ID            string  `json:"id"`
+			Name          string  `json:"name"`
+			Code          string  `json:"code"`
+			SequenceOrder int     `json:"sequence_order"`
+			DistanceKM    float64 `json:"distance_km"`
+			IsActive      bool    `json:"is_active"`
+		}
+
+		var stations []stationRow
+		for rows.Next() {
+			var s stationRow
+			var createdAt interface{}
+			if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.SequenceOrder, &s.DistanceKM, &s.IsActive, &createdAt); err != nil {
+				writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+				return
+			}
+			stations = append(stations, s)
+		}
+		if stations == nil {
+			stations = []stationRow{}
+		}
+
+		totalPages := 0
+		if limit > 0 {
+			totalPages = (total + limit - 1) / limit
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"data":        stations,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+		return
+	}
+
 	query := `
 		SELECT id, name, code, sequence_order, distance_km, is_active, created_at
 		FROM stations
-	`
-	if allStr != "true" {
-		query += " WHERE is_active = true"
-	}
-	query += " ORDER BY distance_km ASC"
+	` + whereClause + " ORDER BY distance_km ASC"
 
 	rows, err := h.db.Query(r.Context(), query)
 	if err != nil {
@@ -628,6 +702,115 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 		} else {
 			whereClause += " AND " + c
 		}
+	}
+
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	if pageStr != "" {
+		page, _ := strconv.Atoi(pageStr)
+		if page < 1 {
+			page = 1
+		}
+		limit, _ := strconv.Atoi(limitStr)
+		if limit < 1 {
+			limit = 10
+		}
+
+		var total int
+		countQuery := fmt.Sprintf(`
+			SELECT COUNT(*)
+			FROM bookings b
+			JOIN stations s_start ON s_start.id = b.start_station_id
+			JOIN stations s_end   ON s_end.id   = b.end_station_id
+			JOIN seats s          ON s.id        = b.seat_id
+			JOIN coaches c        ON c.id        = s.coach_id
+			LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+			LEFT JOIN trains t     ON t.id      = sch.train_id
+			%s
+		`, whereClause)
+		if err := h.db.QueryRow(r.Context(), countQuery, args...).Scan(&total); err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to count bookings: "+err.Error())
+			return
+		}
+
+		offset := (page - 1) * limit
+		query := fmt.Sprintf(`
+			SELECT
+				b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''),
+				s_start.name, s_end.name,
+				b.start_seq, b.end_seq, b.fare_lkr, b.status,
+				c.coach_number, s.seat_number, b.created_at::text,
+				COALESCE(t.id::text, ''), COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(c.coach_class, 'SECOND')
+			FROM bookings b
+			JOIN stations s_start ON s_start.id = b.start_station_id
+			JOIN stations s_end   ON s_end.id   = b.end_station_id
+			JOIN seats s          ON s.id        = b.seat_id
+			JOIN coaches c        ON c.id        = s.coach_id
+			LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+			LEFT JOIN trains t     ON t.id      = sch.train_id
+			%s
+			ORDER BY b.created_at DESC
+			LIMIT %d OFFSET %d
+		`, whereClause, limit, offset)
+
+		rows, err := h.db.Query(r.Context(), query, args...)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to fetch bookings: "+err.Error())
+			return
+		}
+		defer rows.Close()
+
+		type bookingRow struct {
+			ID               string  `json:"id"`
+			PassengerName    string  `json:"passenger_name"`
+			PassengerEmail   string  `json:"passenger_email"`
+			StartStationName string  `json:"start_station_name"`
+			EndStationName   string  `json:"end_station_name"`
+			StartSeq         int     `json:"start_seq"`
+			EndSeq           int     `json:"end_seq"`
+			FareLKR          float64 `json:"fare_lkr"`
+			Status           string  `json:"status"`
+			CoachNumber      int     `json:"coach_number"`
+			SeatNumber       int     `json:"seat_number"`
+			CreatedAt        string  `json:"created_at"`
+			TrainID          string  `json:"train_id"`
+			TrainName        string  `json:"train_name"`
+			TrainNumber      string  `json:"train_number"`
+			CoachClass       string  `json:"coach_class"`
+		}
+
+		var bookings []bookingRow
+		for rows.Next() {
+			var b bookingRow
+			if err := rows.Scan(
+				&b.ID, &b.PassengerName, &b.PassengerEmail,
+				&b.StartStationName, &b.EndStationName,
+				&b.StartSeq, &b.EndSeq, &b.FareLKR, &b.Status,
+				&b.CoachNumber, &b.SeatNumber, &b.CreatedAt,
+				&b.TrainID, &b.TrainName, &b.TrainNumber, &b.CoachClass,
+			); err != nil {
+				writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+				return
+			}
+			bookings = append(bookings, b)
+		}
+		if bookings == nil {
+			bookings = []bookingRow{}
+		}
+
+		totalPages := 0
+		if limit > 0 {
+			totalPages = (total + limit - 1) / limit
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"data":        bookings,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+		return
 	}
 
 	query := fmt.Sprintf(`
