@@ -1,10 +1,16 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Suspense, lazy } from 'react'
+import { AuthProvider } from './context/AuthContext'
 
 // Lazy-load pages for code splitting
 const HomePage      = lazy(() => import('./pages/HomePage'))
 const SeatsPage     = lazy(() => import('./pages/SeatsPage'))
 const BookingPage   = lazy(() => import('./pages/BookingPage'))
+const UserLogin     = lazy(() => import('./pages/UserLogin'))
+const UserRegister  = lazy(() => import('./pages/UserRegister'))
+const ProfilePage   = lazy(() => import('./pages/ProfilePage'))
+const MyBookingsPage= lazy(() => import('./pages/MyBookingsPage'))
+const AdminLogin    = lazy(() => import('./pages/admin/AdminLogin'))
 const AdminLayout   = lazy(() => import('./pages/admin/AdminLayout'))
 const AdminMetrics  = lazy(() => import('./pages/admin/AdminMetrics'))
 const AdminBookings = lazy(() => import('./pages/admin/AdminBookings'))
@@ -26,34 +32,41 @@ function LoadingSpinner() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<LoadingSpinner />}>
-        <Routes>
-          {/* ── Passenger Routes ───────────────────────────────────────── */}
-          <Route path="/"            element={<HomePage />} />
-          <Route path="/seats"       element={<SeatsPage />} />
-          <Route path="/booking/:id" element={<BookingPage />} />
+      <AuthProvider>
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
+            {/* ── Passenger Routes ───────────────────────────────────────── */}
+            <Route path="/"            element={<HomePage />} />
+            <Route path="/seats"       element={<SeatsPage />} />
+            <Route path="/booking/:id" element={<BookingPage />} />
+            <Route path="/login"       element={<UserLogin />} />
+            <Route path="/register"    element={<UserRegister />} />
+            <Route path="/profile"     element={<ProfilePage />} />
+            <Route path="/my-bookings" element={<MyBookingsPage />} />
 
-          {/* ── Admin Routes ───────────────────────────────────────────── */}
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Navigate to="metrics" replace />} />
-            <Route path="metrics"   element={<AdminMetrics />} />
-            <Route path="stations"  element={<AdminStations />} />
-            <Route path="trains"    element={<AdminTrains />} />
-            <Route path="schedules" element={<AdminSchedules />} />
-            <Route path="bookings"  element={<AdminBookings />} />
-          </Route>
+            {/* ── Admin Auth & Admin Routes ────────────────────────────── */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<Navigate to="metrics" replace />} />
+              <Route path="metrics"   element={<AdminMetrics />} />
+              <Route path="stations"  element={<AdminStations />} />
+              <Route path="trains"    element={<AdminTrains />} />
+              <Route path="schedules" element={<AdminSchedules />} />
+              <Route path="bookings"  element={<AdminBookings />} />
+            </Route>
 
-          {/* ── 404 ────────────────────────────────────────────────────── */}
-          <Route path="*" element={
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="glass-card p-12 text-center">
-                <h1 className="text-6xl font-black text-slate-200 mb-2">404</h1>
-                <p className="text-slate-400">Page not found</p>
+            {/* ── 404 ────────────────────────────────────────────────────── */}
+            <Route path="*" element={
+              <div className="min-h-screen flex items-center justify-center">
+                <div className="glass-card p-12 text-center">
+                  <h1 className="text-6xl font-black text-slate-200 mb-2">404</h1>
+                  <p className="text-slate-400">Page not found</p>
+                </div>
               </div>
-            </div>
-          } />
-        </Routes>
-      </Suspense>
+            } />
+          </Routes>
+        </Suspense>
+      </AuthProvider>
     </BrowserRouter>
   )
 }

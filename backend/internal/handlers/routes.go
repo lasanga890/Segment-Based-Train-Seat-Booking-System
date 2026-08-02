@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/lasanga890/segment-train-booking/internal/auth"
 	"github.com/lasanga890/segment-train-booking/internal/models"
 	"github.com/lasanga890/segment-train-booking/internal/services"
 )
@@ -465,6 +466,7 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 		PassengerEmail string `json:"passenger_email"`
 		StartStationID string `json:"start_station_id"`
 		EndStationID   string `json:"end_station_id"`
+		UserID         string `json:"user_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
@@ -501,6 +503,16 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, http.StatusInternalServerError, "Failed to confirm booking")
 		return
+	}
+
+	var userID *string
+	if claims, ok := r.Context().Value(UserClaimsKey).(*auth.Claims); ok && claims != nil {
+		userID = &claims.UserID
+	} else if req.UserID != "" {
+		userID = &req.UserID
+	}
+	if userID != nil {
+		_, _ = h.db.Exec(r.Context(), "UPDATE bookings SET user_id = $1 WHERE id = $2", *userID, booking.ID)
 	}
 
 	// Fetch full details with joined train, schedule, coach, seat, and station names

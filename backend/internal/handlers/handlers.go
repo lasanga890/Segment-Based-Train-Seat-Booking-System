@@ -44,16 +44,48 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 		// Seat availability for a given leg
 		r.Get("/seats/availability", h.GetSeatAvailability)
 
+		// Auth routes
+		r.Post("/auth/admin/login", h.AdminLogin)
+		r.Post("/auth/user/register", h.UserRegister)
+		r.Post("/auth/user/login", h.UserLogin)
+		r.With(h.UserAuthMiddleware).Get("/auth/user/me", h.GetUserMe)
+
 		// Bookings
-		r.Post("/bookings/hold", h.HoldSeat)
-		r.Post("/bookings/hold-many", h.HoldManySeats)
-		r.Post("/bookings/confirm", h.ConfirmBooking)
+		r.With(h.UserAuthMiddleware).Post("/bookings/hold", h.HoldSeat)
+		r.With(h.UserAuthMiddleware).Post("/bookings/hold-many", h.HoldManySeats)
+		r.With(h.UserAuthMiddleware).Post("/bookings/confirm", h.ConfirmBooking)
 		r.Delete("/bookings/hold/{holdId}", h.ReleaseHold)
 		r.Get("/bookings/{id}", h.GetBooking)
 
-		// Admin routes (JWT protected — middleware added in Phase 3)
+		// Passenger Profile & Dashboard Routes
+		r.Route("/user", func(r chi.Router) {
+			r.Use(h.UserAuthMiddleware)
+			r.Get("/profile", h.GetUserProfile)
+			r.Put("/profile", h.UpdateUserProfile)
+
+			r.Get("/frequent-passengers", h.ListFrequentPassengers)
+			r.Post("/frequent-passengers", h.AddFrequentPassenger)
+			r.Delete("/frequent-passengers/{id}", h.DeleteFrequentPassenger)
+
+			r.Get("/favorite-routes", h.ListFavoriteRoutes)
+			r.Post("/favorite-routes", h.AddFavoriteRoute)
+			r.Delete("/favorite-routes/{id}", h.DeleteFavoriteRoute)
+
+			r.Get("/bookings", h.GetUserBookings)
+			r.Patch("/bookings/{id}/cancel", h.CancelUserBooking)
+
+			r.Get("/waitlists", h.GetUserWaitlists)
+
+			r.Get("/notifications", h.GetUserNotifications)
+			r.Patch("/notifications/{id}/read", h.MarkNotificationRead)
+		})
+
+		// Waitlist Join
+		r.With(h.UserAuthMiddleware).Post("/waitlists/join", h.JoinWaitlist)
+
+		// Admin routes (JWT protected)
 		r.Route("/admin", func(r chi.Router) {
-			// TODO: r.Use(h.AdminAuthMiddleware)
+			r.Use(h.AdminAuthMiddleware)
 			r.Get("/metrics", h.GetAdminMetrics)
 			r.Get("/bookings", h.ListAllBookings)
 			// Stations admin

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getStationsPaginated, adminCreateStation, adminUpdateStation, adminToggleStationStatus, AdminStation } from '../../services/api'
-import { Edit2, Plus, X, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Edit2, Plus, X, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
 import Pagination from '../../components/Pagination'
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -27,13 +27,18 @@ export default function AdminStations() {
   const [isModalOpen, setModalOpen] = useState(false)
   const [editStation, setEditStation] = useState<AdminStation | null>(null)
   
+  // Deactivation Modal State
+  const [deactivateStation, setDeactivateStation] = useState<AdminStation | null>(null)
+  const [deactivateReason, setDeactivateReason] = useState('')
+  const [deactivating, setDeactivating] = useState(false)
+
   // Pagination state
   const [page, setPage] = useState(1)
   const [limit, setLimit] = useState(10)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
 
-  // form state
+  // Form state
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
   const [seq, setSeq] = useState('')
@@ -93,13 +98,41 @@ export default function AdminStations() {
     }
   }
 
-  const handleToggle = async (st: AdminStation) => {
+  const handleToggleClick = (st: AdminStation) => {
+    if (st.is_active) {
+      // Prompt for inactivation reason via popup modal
+      setDeactivateStation(st)
+      setDeactivateReason('')
+    } else {
+      // Activate immediately
+      activateStationDirectly(st)
+    }
+  }
+
+  const activateStationDirectly = async (st: AdminStation) => {
     try {
-      await adminToggleStationStatus(st.id, !st.is_active)
-      setToast({ msg: `Station marked ${!st.is_active ? 'active' : 'inactive'}`, type: 'success' })
+      await adminToggleStationStatus(st.id, true)
+      setToast({ msg: `Station ${st.name} marked active`, type: 'success' })
       loadStations()
     } catch (e) {
-      setToast({ msg: 'Failed to toggle status', type: 'error' })
+      setToast({ msg: 'Failed to activate station', type: 'error' })
+    }
+  }
+
+  const handleConfirmDeactivate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!deactivateStation || !deactivateReason.trim()) return
+
+    setDeactivating(true)
+    try {
+      await adminToggleStationStatus(deactivateStation.id, false, deactivateReason)
+      setToast({ msg: `Station ${deactivateStation.name} marked inactive`, type: 'success' })
+      setDeactivateStation(null)
+      loadStations()
+    } catch (e) {
+      setToast({ msg: 'Failed to inactivate station', type: 'error' })
+    } finally {
+      setDeactivating(false)
     }
   }
 
@@ -126,7 +159,7 @@ export default function AdminStations() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/5 text-left">
-                  {['Seq #', 'Name', 'Code', 'Distance KM', 'Status', 'Actions'].map(h => (
+                  {['Seq #', 'Name', 'Code', 'Distance (Km)', 'Status', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                       {h}
                     </th>
@@ -154,7 +187,7 @@ export default function AdminStations() {
                         {s.is_active ? s.name : <span className="line-through">{s.name}</span>}
                       </td>
                       <td className="px-4 py-3 text-brand-300 font-mono">{s.code}</td>
-                      <td className="px-4 py-3 text-slate-400">{s.distance_km}</td>
+                      <td className="px-4 py-3 text-slate-400 font-mono">{s.distance_km} Km</td>
                       <td className="px-4 py-3">
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           s.is_active ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400 line-through'
@@ -163,11 +196,18 @@ export default function AdminStations() {
                         </span>
                       </td>
                       <td className="px-4 py-3 flex gap-2">
-                        <button onClick={() => openEdit(s)} className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors">
+                        <button onClick={() => openEdit(s)} className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors" title="Edit Station">
                           <Edit2 size={14} />
                         </button>
-                        <button onClick={() => handleToggle(s)} className="text-xs font-medium px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition-colors">
-                          Toggle
+                        <button
+                          onClick={() => handleToggleClick(s)}
+                          className={`text-xs font-medium px-2.5 py-1 rounded transition-colors ${
+                            s.is_active
+                              ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20'
+                              : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20'
+                          }`}
+                        >
+                          {s.is_active ? 'Inactivate' : 'Activate'}
                         </button>
                       </td>
                     </motion.tr>
@@ -187,15 +227,18 @@ export default function AdminStations() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Edit / Add Station Modal */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+            onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false) }}
+          >
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="glass-card p-6 w-full max-w-md"
+              className="glass-card p-6 w-full max-w-md border border-white/10 shadow-2xl"
             >
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
                 <h3 className="text-xl font-bold text-white">{editStation ? 'Edit Station' : 'Add Station'}</h3>
                 <button onClick={() => setModalOpen(false)} className="text-slate-400 hover:text-white">
                   <X size={20} />
@@ -220,9 +263,75 @@ export default function AdminStations() {
                     <input required type="number" step="0.1" className="input-field" value={dist} onChange={e => setDist(e.target.value)} placeholder="0.0" />
                   </div>
                 </div>
-                <div className="flex justify-end gap-3 mt-6">
-                  <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>
-                  <button type="submit" className="btn-primary">{editStation ? 'Save Changes' : 'Create Station'}</button>
+                <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-white/10">
+                  <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary text-xs px-4 py-2">Cancel</button>
+                  <button type="submit" className="btn-primary text-xs px-4 py-2 font-bold">{editStation ? 'Save Changes' : 'Create Station'}</button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Background Blur Modal: Ask Inactivation Reason */}
+      <AnimatePresence>
+        {deactivateStation && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+            onClick={(e) => { if (e.target === e.currentTarget) setDeactivateStation(null) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="glass-card p-6 w-full max-w-md border border-white/10 shadow-2xl relative"
+            >
+              <div className="flex items-center gap-3 text-red-400 mb-2 border-b border-white/10 pb-3">
+                <AlertTriangle size={24} />
+                <div>
+                  <h3 className="text-lg font-bold text-white">Inactivate Station</h3>
+                  <p className="text-xs text-slate-400 font-mono">{deactivateStation.name} ({deactivateStation.code})</p>
+                </div>
+              </div>
+
+              <p className="text-xs text-slate-300 my-3 leading-relaxed">
+                Please provide a mandatory reason for inactivating <strong>{deactivateStation.name}</strong>. Inactive stations will not be available for new booking segment calculations.
+              </p>
+
+              <form onSubmit={handleConfirmDeactivate} className="space-y-4 mt-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">
+                    Reason for Inactivation <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    className="input-field text-sm w-full p-2.5"
+                    placeholder="e.g. Maintenance, Track Repair, Emergency Closure..."
+                    value={deactivateReason}
+                    onChange={(e) => setDeactivateReason(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-3 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setDeactivateStation(null)}
+                    className="btn-secondary text-xs px-4 py-2"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={deactivating || !deactivateReason.trim()}
+                    className="bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    {deactivating ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      'Inactivate Station'
+                    )}
+                  </button>
                 </div>
               </form>
             </motion.div>

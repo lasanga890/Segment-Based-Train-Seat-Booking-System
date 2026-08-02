@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Train, ArrowRight, ArrowLeft, Info, ShoppingCart, X, Armchair, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { Train, ArrowRight, ArrowLeft, Info, ShoppingCart, X, Armchair, ChevronRight, CheckCircle2, Clock, Sparkles } from 'lucide-react'
 import {
-  getSeatAvailability, getStations, holdManySeats, getScheduleCoaches,
+  getSeatAvailability, getStations, holdManySeats, getScheduleCoaches, joinWaitlist,
   type SeatAvailability, type Station, type MultiHoldItem, type ScheduleCoach
 } from '../services/api'
 import BookingModal from '../components/BookingModal'
@@ -30,6 +30,28 @@ export default function SeatsPage() {
   const [loading, setLoading]         = useState(false)
   const [holdLoading, setHoldLoading] = useState(false)
   const [holdResults, setHoldResults] = useState<MultiHoldItem[] | null>(null)
+
+  const [waitlistJoining, setWaitlistJoining] = useState(false)
+  const [waitlistSuccessMsg, setWaitlistSuccessMsg] = useState('')
+
+  const handleJoinWaitlistAction = async (coachClass: string) => {
+    if (!scheduleId || !fromStation || !toStation) return
+    setWaitlistJoining(true)
+    setWaitlistSuccessMsg('')
+    try {
+      const res = await joinWaitlist({
+        schedule_id: scheduleId,
+        start_station_id: fromStation.id,
+        end_station_id: toStation.id,
+        coach_class: coachClass,
+      })
+      setWaitlistSuccessMsg(res.message || 'Joined waitlist successfully!')
+    } catch (err: any) {
+      alert(err.message || 'Failed to join waitlist. Please check if you are logged in.')
+    } finally {
+      setWaitlistJoining(false)
+    }
+  }
 
   const fromStation = stations.find(s => s.sequence_order === fromSeq)
   const toStation   = stations.find(s => s.sequence_order === toSeq)
@@ -275,23 +297,42 @@ export default function SeatsPage() {
                           <div className="flex items-center gap-3">
                             {/* Occupancy bar */}
                             <div className="text-right">
-                              <p className={`text-xs font-bold ${occupancyPct > 80 ? 'text-red-400' : occupancyPct > 50 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                                {availableSeats} free
+                              <p className={`text-xs font-bold ${occupancyPct >= 100 ? 'text-red-400' : occupancyPct > 50 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                {availableSeats === 0 ? '100% Full' : `${availableSeats} free`}
                               </p>
                               <div className="w-16 h-1.5 bg-white/10 rounded-full mt-1 overflow-hidden">
                                 <div
-                                  className={`h-full rounded-full ${occupancyPct > 80 ? 'bg-red-500' : occupancyPct > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                  className={`h-full rounded-full ${occupancyPct >= 100 ? 'bg-red-500' : occupancyPct > 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
                                   style={{ width: `${occupancyPct}%` }}
                                 />
                               </div>
                             </div>
-                            {isCoachSelected ? (
+
+                            {availableSeats === 0 ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleJoinWaitlistAction(coach.coach_class)
+                                }}
+                                disabled={waitlistJoining}
+                                className="bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                              >
+                                <Clock size={13} /> Join Waitlist
+                              </button>
+                            ) : isCoachSelected ? (
                               <CheckCircle2 size={20} className="text-brand-400" />
                             ) : (
                               <ChevronRight size={20} className="text-slate-600" />
                             )}
                           </div>
                         </div>
+
+                        {waitlistSuccessMsg && (
+                          <div className="mt-3 p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 text-xs flex items-center gap-1.5">
+                            <Sparkles size={14} /> {waitlistSuccessMsg}
+                          </div>
+                        )}
                       </motion.div>
                     )
                   })

@@ -6,6 +6,35 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/api/v1`
   : '/api/v1'
 
+export const getAdminToken = () => localStorage.getItem('admin_token')
+export const setAdminToken = (token: string | null) => {
+  if (token) localStorage.setItem('admin_token', token)
+  else localStorage.removeItem('admin_token')
+}
+
+export const getUserToken = () => localStorage.getItem('user_token')
+export const setUserToken = (token: string | null) => {
+  if (token) localStorage.setItem('user_token', token)
+  else localStorage.removeItem('user_token')
+}
+
+export const authFetch = async (url: string, options: RequestInit = {}) => {
+  const headers = new Headers(options.headers || {})
+  const isAdminRoute = url.includes('/admin/')
+  const token = isAdminRoute ? getAdminToken() : (getUserToken() || getAdminToken())
+
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const res = await fetch(url, { ...options, headers })
+  if (res.status === 401 && isAdminRoute) {
+    setAdminToken(null)
+    window.location.href = '/admin/login'
+  }
+  return res
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface Station {
@@ -230,10 +259,8 @@ export const getBooking = async (id: string): Promise<Booking> => {
 
 // ─── Admin ────────────────────────────────────────────────────────────────────
 
-export const getAdminMetrics = async (token?: string): Promise<AdminMetrics> => {
-  const res = await fetch(`${BASE_URL}/admin/metrics`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  })
+export const getAdminMetrics = async (): Promise<AdminMetrics> => {
+  const res = await authFetch(`${BASE_URL}/admin/metrics`)
   if (!res.ok) throw new Error('Failed to fetch admin metrics')
   return res.json()
 }
@@ -262,7 +289,7 @@ export const adminUpdateStation = async (id: string, data: Partial<AdminStation>
   return res.json()
 }
 export const adminToggleStationStatus = async (id: string, is_active: boolean) => {
-  const res = await fetch(`${BASE_URL}/admin/stations/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active }) })
+  const res = await authFetch(`${BASE_URL}/admin/stations/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active }) })
   if (!res.ok) throw new Error('Failed to toggle station status')
   return res.json()
 }
@@ -277,47 +304,47 @@ export interface AdminCoach {
   total_seats: number; label: string; booked_seats?: number;
 }
 export const adminGetTrains = async (): Promise<AdminTrain[]> => {
-  const res = await fetch(`${BASE_URL}/admin/trains`)
+  const res = await authFetch(`${BASE_URL}/admin/trains`)
   if (!res.ok) throw new Error('Failed to fetch trains')
   return res.json()
 }
 export const adminCreateTrain = async (data: Omit<AdminTrain,'id'>) => {
-  const res = await fetch(`${BASE_URL}/admin/trains`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  const res = await authFetch(`${BASE_URL}/admin/trains`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to create train')
   return res.json()
 }
 export const adminUpdateTrain = async (id: string, data: Partial<AdminTrain>) => {
-  const res = await fetch(`${BASE_URL}/admin/trains/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  const res = await authFetch(`${BASE_URL}/admin/trains/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to update train')
   return res.json()
 }
 export const adminDeleteTrain = async (id: string) => {
-  const res = await fetch(`${BASE_URL}/admin/trains/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${BASE_URL}/admin/trains/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to delete train')
   return res.json()
 }
 export const adminListTrains = async (): Promise<AdminTrain[]> => {
-  const res = await fetch(`${BASE_URL}/admin/trains`)
+  const res = await authFetch(`${BASE_URL}/admin/trains`)
   if (!res.ok) throw new Error('Failed to fetch trains')
   return res.json()
 }
 export const adminListTrainCoaches = async (trainId: string): Promise<AdminCoach[]> => {
-  const res = await fetch(`${BASE_URL}/admin/trains/${trainId}/coaches`)
+  const res = await authFetch(`${BASE_URL}/admin/trains/${trainId}/coaches`)
   if (!res.ok) throw new Error('Failed to fetch train coaches')
   return res.json()
 }
 export const adminAddCoach = async (trainId: string, data: Omit<AdminCoach,'id'|'train_id'>) => {
-  const res = await fetch(`${BASE_URL}/admin/trains/${trainId}/coaches`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  const res = await authFetch(`${BASE_URL}/admin/trains/${trainId}/coaches`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to add coach')
   return res.json()
 }
 export const adminUpdateCoach = async (id: string, data: Partial<AdminCoach>) => {
-  const res = await fetch(`${BASE_URL}/admin/coaches/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  const res = await authFetch(`${BASE_URL}/admin/coaches/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to update coach')
   return res.json()
 }
 export const adminRemoveCoach = async (id: string) => {
-  const res = await fetch(`${BASE_URL}/admin/coaches/${id}`, { method: 'DELETE' })
+  const res = await authFetch(`${BASE_URL}/admin/coaches/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('Failed to remove coach')
   return res.json()
 }
@@ -328,17 +355,17 @@ export interface AdminSchedule {
   direction: string; departure_date: string; departure_time: string; is_active: boolean; cancel_reason?: string; batch_id?: string;
 }
 export const adminCreateSchedule = async (data: {train_id:string, start_date:string, end_date:string, departure_time:string}) => {
-  const res = await fetch(`${BASE_URL}/admin/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  const res = await authFetch(`${BASE_URL}/admin/schedules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error((await res.json()).error || 'Failed to create schedule')
   return res.json()
 }
 export const adminUpdateSchedule = async (id: string, data: {departure_date?:string, departure_time:string}) => {
-  const res = await fetch(`${BASE_URL}/admin/schedules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
+  const res = await authFetch(`${BASE_URL}/admin/schedules/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) })
   if (!res.ok) throw new Error('Failed to update schedule')
   return res.json()
 }
 export const adminToggleScheduleStatus = async (id: string, is_active: boolean, reason?: string) => {
-  const res = await fetch(`${BASE_URL}/admin/schedules/${id}/status`, { 
+  const res = await authFetch(`${BASE_URL}/admin/schedules/${id}/status`, { 
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ is_active, reason })
@@ -361,17 +388,254 @@ export const getStationsPaginated = async (params: { all?: boolean, page: number
   return res.json()
 }
 
+// ─── Authentication APIs ──────────────────────────────────────────────────────
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  phone?: string
+}
+
+export const adminLoginApi = async (username: string, password: string) => {
+  const res = await fetch(`${BASE_URL}/auth/admin/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Admin login failed')
+  setAdminToken(data.token)
+  return data
+}
+
+export const userRegisterApi = async (data: { name: string; email: string; password: string; phone?: string }) => {
+  const res = await fetch(`${BASE_URL}/auth/user/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  const resData = await res.json()
+  if (!res.ok) throw new Error(resData.error || 'Registration failed')
+  setUserToken(resData.token)
+  return resData
+}
+
+export const userLoginApi = async (email: string, password: string) => {
+  const res = await fetch(`${BASE_URL}/auth/user/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'User login failed')
+  setUserToken(data.token)
+  return data
+}
+
+export const getUserMeApi = async (): Promise<User> => {
+  const res = await authFetch(`${BASE_URL}/auth/user/me`)
+  if (!res.ok) throw new Error('Not authenticated')
+  return res.json()
+}
+
+// ─── Passenger Profile & Presets ──────────────────────────────────────────────
+
+export interface UserProfile extends User {
+  phone?: string
+  nic_passport?: string
+  created_at?: string
+}
+
+export interface FrequentPassenger {
+  id: string
+  full_name: string
+  nic_passport: string
+  gender: string
+  created_at: string
+}
+
+export interface FavoriteRoute {
+  id: string
+  start_station_id: string
+  start_station_name: string
+  start_seq: number
+  end_station_id: string
+  end_station_name: string
+  end_seq: number
+  label?: string
+  created_at: string
+}
+
+export interface UserBooking {
+  id: string
+  passenger_name: string
+  passenger_email: string
+  start_station_name: string
+  end_station_name: string
+  start_seq: number
+  end_seq: number
+  fare_lkr: number
+  status: 'CONFIRMED' | 'HOLD' | 'CANCELLED'
+  coach_number: number
+  seat_number: number
+  created_at: string
+  train_id: string
+  train_name: string
+  train_number: string
+  coach_class: string
+  departure_date: string
+  departure_time: string
+}
+
+export interface WaitlistItem {
+  id: string
+  schedule_id: string
+  train_name: string
+  train_number: string
+  start_station_name: string
+  end_station_name: string
+  coach_class: string
+  status: 'WAITING' | 'PROMOTED' | 'EXPIRED' | 'CANCELLED'
+  departure_date: string
+  departure_time: string
+  created_at: string
+}
+
+export interface UserNotification {
+  id: string
+  title: string
+  message: string
+  is_read: boolean
+  created_at: string
+}
+
+export const getUserProfile = async (): Promise<UserProfile> => {
+  const res = await authFetch(`${BASE_URL}/user/profile`)
+  if (!res.ok) throw new Error('Failed to fetch profile')
+  return res.json()
+}
+
+export const updateUserProfile = async (data: { name?: string; phone?: string; nic_passport?: string }) => {
+  const res = await authFetch(`${BASE_URL}/user/profile`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to update profile')
+  return res.json()
+}
+
+export const getFrequentPassengers = async (): Promise<FrequentPassenger[]> => {
+  const res = await authFetch(`${BASE_URL}/user/frequent-passengers`)
+  if (!res.ok) throw new Error('Failed to fetch presets')
+  return res.json()
+}
+
+export const addFrequentPassenger = async (data: { full_name: string; nic_passport: string; gender: string }) => {
+  const res = await authFetch(`${BASE_URL}/user/frequent-passengers`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to save passenger preset')
+  return res.json()
+}
+
+export const deleteFrequentPassenger = async (id: string) => {
+  const res = await authFetch(`${BASE_URL}/user/frequent-passengers/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete preset')
+  return res.json()
+}
+
+export const getFavoriteRoutes = async (): Promise<FavoriteRoute[]> => {
+  const res = await authFetch(`${BASE_URL}/user/favorite-routes`)
+  if (!res.ok) throw new Error('Failed to fetch favorite routes')
+  return res.json()
+}
+
+export const addFavoriteRoute = async (data: { start_station_id: string; end_station_id: string; label?: string }) => {
+  const res = await authFetch(`${BASE_URL}/user/favorite-routes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  if (!res.ok) throw new Error('Failed to save favorite route')
+  return res.json()
+}
+
+export const deleteFavoriteRoute = async (id: string) => {
+  const res = await authFetch(`${BASE_URL}/user/favorite-routes/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed to delete favorite route')
+  return res.json()
+}
+
+export const getUserBookings = async (): Promise<UserBooking[]> => {
+  const res = await authFetch(`${BASE_URL}/user/bookings`)
+  if (!res.ok) throw new Error('Failed to fetch user bookings')
+  return res.json()
+}
+
+export const cancelUserBooking = async (id: string) => {
+  const res = await authFetch(`${BASE_URL}/user/bookings/${id}/cancel`, { method: 'PATCH' })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data.error || 'Failed to cancel booking')
+  return data
+}
+
+export const joinWaitlist = async (data: { schedule_id: string; start_station_id: string; end_station_id: string; coach_class: string }) => {
+  const res = await authFetch(`${BASE_URL}/waitlists/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  })
+  const resData = await res.json()
+  if (!res.ok) throw new Error(resData.error || 'Failed to join waitlist')
+  return resData
+}
+
+export const getUserWaitlists = async (): Promise<WaitlistItem[]> => {
+  const res = await authFetch(`${BASE_URL}/user/waitlists`)
+  if (!res.ok) throw new Error('Failed to fetch waitlists')
+  return res.json()
+}
+
+export const getUserNotifications = async (): Promise<UserNotification[]> => {
+  const res = await authFetch(`${BASE_URL}/user/notifications`)
+  if (!res.ok) throw new Error('Failed to fetch notifications')
+  return res.json()
+}
+
+export const markNotificationRead = async (id: string) => {
+  const res = await authFetch(`${BASE_URL}/user/notifications/${id}/read`, { method: 'PATCH' })
+  if (!res.ok) throw new Error('Failed to mark notification read')
+  return res.json()
+}
+
+// Update admin calls to use authFetch
 export const adminListSchedulesPaginated = async (params?: {date_from?:string, date_to?:string, direction?:string, page?:number, limit?:number}): Promise<PaginatedResponse<AdminSchedule>> => {
   const query = new URLSearchParams(params as any).toString()
-  const res = await fetch(`${BASE_URL}/admin/schedules${query ? `?${query}` : ''}`)
+  const res = await authFetch(`${BASE_URL}/admin/schedules${query ? `?${query}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch schedules')
   return res.json()
 }
 
 export const adminGetAllBookingsPaginated = async (params?: {status?:string, search?:string, date?:string, train_id?:string, coach_class?:string, page?:number, limit?:number}): Promise<PaginatedResponse<Booking>> => {
   const query = new URLSearchParams(params as any).toString()
-  const res = await fetch(`${BASE_URL}/admin/bookings${query ? `?${query}` : ''}`)
+  const res = await authFetch(`${BASE_URL}/admin/bookings${query ? `?${query}` : ''}`)
   if (!res.ok) throw new Error('Failed to fetch bookings')
+  return res.json()
+}
+
+// Admin Booking operations
+export const adminCancelBooking = async (id: string) => {
+  const res = await authFetch(`${BASE_URL}/admin/bookings/${id}/cancel`, { method: 'PATCH' })
+  if (!res.ok) throw new Error('Failed to cancel booking')
+  return res.json()
+}
+export const adminGetSeatOccupancy = async (seatId: string) => {
+  const res = await authFetch(`${BASE_URL}/admin/seats/${seatId}/occupancy`)
+  if (!res.ok) throw new Error('Failed to fetch seat occupancy')
   return res.json()
 }
 
@@ -379,12 +643,12 @@ export const adminGetAllBookingsPaginated = async (params?: {status?:string, sea
 export interface SegmentAnalytic { from_seq:number; to_seq:number; from_name:string; to_name:string; total_bookings:number; occupancy_pct:number; }
 export interface RevenueAnalytic { total_revenue:number; full_route_revenue:number; segment_reuse_revenue:number; full_route_count:number; segment_reuse_count:number; }
 export const adminGetSegmentAnalytics = async (): Promise<SegmentAnalytic[]> => {
-  const res = await fetch(`${BASE_URL}/admin/analytics/segments`)
+  const res = await authFetch(`${BASE_URL}/admin/analytics/segments`)
   if (!res.ok) throw new Error('Failed to fetch segment analytics')
   return res.json()
 }
 export const adminGetRevenueAnalytics = async (): Promise<RevenueAnalytic> => {
-  const res = await fetch(`${BASE_URL}/admin/analytics/revenue`)
+  const res = await authFetch(`${BASE_URL}/admin/analytics/revenue`)
   if (!res.ok) throw new Error('Failed to fetch revenue analytics')
   return res.json()
 }

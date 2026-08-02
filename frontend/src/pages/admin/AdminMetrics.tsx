@@ -9,7 +9,7 @@ export default function AdminMetrics() {
   const [loadingRev, setLR] = useState(true)
 
   useEffect(() => {
-    getAdminMetrics('admin-token').then(setMetrics).finally(() => setLM(false))
+    getAdminMetrics().then(setMetrics).catch(() => {}).finally(() => setLM(false))
     adminGetRevenueAnalytics().then(setRevenue).catch(()=>{}).finally(() => setLR(false))
   }, [])
 

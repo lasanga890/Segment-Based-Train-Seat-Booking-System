@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, Route, CheckCircle2 } from 'lucide-react'
-import { getStations, getSchedules, type Station, type Schedule } from '../services/api'
+import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, Route, CheckCircle2, User, LogOut, Bookmark } from 'lucide-react'
+import { getStations, getSchedules, getFavoriteRoutes, type Station, type Schedule, type FavoriteRoute } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import Navbar from '../components/Navbar'
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const { user, logoutUser } = useAuth()
   const [stations, setStations] = useState<Station[]>([])
+  const [favoriteRoutes, setFavoriteRoutes] = useState<FavoriteRoute[]>([])
   const [fromSeq, setFromSeq] = useState<string>('')
   const [toSeq, setToSeq] = useState<string>('')
   const [travelDate, setTravelDate] = useState<string>(() => {
@@ -23,13 +27,20 @@ export default function HomePage() {
 
   useEffect(() => {
     getStations()
-      .then(data => {
+      .then((data) => {
         data.sort((a, b) => a.distance_km - b.distance_km)
         setStations(data)
+        setLoading(false)
       })
-      .catch(() => setError('Failed to load stations. Is the backend running?'))
-      .finally(() => setLoading(false))
-  }, [])
+      .catch((err) => {
+        setError('Failed to load stations: ' + err.message)
+        setLoading(false)
+      })
+
+    if (user) {
+      getFavoriteRoutes().then(setFavoriteRoutes).catch(console.error)
+    }
+  }, [user])
 
   // Auto-fetch available trains whenever From, To, and Date are set
   useEffect(() => {
@@ -81,24 +92,7 @@ export default function HomePage() {
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl" />
 
       <div className="relative z-10 min-h-screen flex flex-col">
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <header className="p-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
-              <Train size={20} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">SL Rail</h1>
-              <p className="text-xs text-slate-400">Scenic Booking</p>
-            </div>
-          </div>
-          <a
-            href="/admin"
-            className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
-          >
-            Admin →
-          </a>
-        </header>
+        <Navbar />
 
         {/* ── Hero ───────────────────────────────────────────────────── */}
         <main className="flex-1 flex items-center justify-center px-4 py-12">
@@ -124,6 +118,28 @@ export default function HomePage() {
                 not the empty seat behind you.
               </p>
             </motion.div>
+
+            {/* ── Favorite Routes Quick Select ─────────────────────── */}
+            {user && favoriteRoutes.length > 0 && (
+              <div className="mb-4 flex items-center justify-center gap-2 flex-wrap text-xs">
+                <span className="text-slate-400 font-semibold flex items-center gap-1">
+                  <Bookmark size={13} className="text-amber-400" /> Favorites:
+                </span>
+                {favoriteRoutes.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => {
+                      setFromSeq(String(r.start_seq))
+                      setToSeq(String(r.end_seq))
+                    }}
+                    className="bg-slate-900/80 border border-white/10 hover:border-brand-500/50 px-3 py-1 rounded-full text-slate-300 hover:text-white transition-colors"
+                  >
+                    {r.label ? `${r.label}: ` : ''}{r.start_station_name} → {r.end_station_name}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* ── Search Form ──────────────────────────────────────────── */}
             <motion.div
