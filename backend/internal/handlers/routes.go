@@ -229,7 +229,12 @@ func (h *Handler) ListScheduleCoaches(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := h.db.Query(r.Context(), `
+	classQuery := r.URL.Query().Get("coach_class")
+	if classQuery == "" {
+		classQuery = r.URL.Query().Get("class")
+	}
+
+	query := `
 		SELECT
 			c.id::text,
 			c.coach_number,
@@ -248,8 +253,19 @@ func (h *Handler) ListScheduleCoaches(w http.ResponseWriter, r *http.Request) {
 		FROM coaches c
 		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id AND sch.is_active = true
 		WHERE c.coach_type = 'RESERVED'
-		ORDER BY c.coach_class, c.coach_number
-	`, scheduleID)
+	`
+
+	var args []interface{}
+	args = append(args, scheduleID)
+
+	if classQuery != "" {
+		query += " AND UPPER(c.coach_class) = UPPER($2)"
+		args = append(args, classQuery)
+	}
+
+	query += " ORDER BY c.coach_class, c.coach_number"
+
+	rows, err := h.db.Query(r.Context(), query, args...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch schedule coaches: "+err.Error())
 		return

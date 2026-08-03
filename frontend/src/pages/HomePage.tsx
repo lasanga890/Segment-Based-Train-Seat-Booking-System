@@ -354,42 +354,6 @@ export default function HomePage() {
                 </button>
               </form>
             </motion.div>
-
-            {/* ── Route Strip ─────────────────────────────────────────── */}
-            {!loading && stations.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="mt-8 overflow-x-auto"
-              >
-                <div className="flex items-center gap-0 min-w-max mx-auto">
-                  {stations.map((s, i) => (
-                    <div key={s.id} className="flex items-center">
-                      <div className="flex flex-col items-center">
-                        <div className={`w-2 h-2 rounded-full ${
-                          s.sequence_order === parseInt(fromSeq) ? 'bg-brand-400 w-3 h-3' :
-                          s.sequence_order === parseInt(toSeq)   ? 'bg-cyan-400 w-3 h-3' :
-                          'bg-slate-600'
-                        }`} />
-                        {(i === 0 || i === stations.length - 1 ||
-                          s.sequence_order === parseInt(fromSeq) ||
-                          s.sequence_order === parseInt(toSeq)) && (
-                          <span className="text-[10px] text-slate-500 mt-1 whitespace-nowrap">{s.code}</span>
-                        )}
-                      </div>
-                      {i < stations.length - 1 && (
-                        <div className={`h-px w-6 ${
-                          parseInt(fromSeq) <= s.sequence_order && s.sequence_order < parseInt(toSeq)
-                            ? 'bg-brand-500'
-                            : 'bg-slate-700'
-                        }`} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
           </div>
         </main>
       </div>

@@ -187,8 +187,9 @@ export const getCoaches = async (): Promise<Coach[]> => {
   return res.json()
 }
 
-export const getScheduleCoaches = async (scheduleId: string): Promise<ScheduleCoach[]> => {
-  const res = await fetch(`${BASE_URL}/schedules/${scheduleId}/coaches`)
+export const getScheduleCoaches = async (scheduleId: string, coachClass?: string): Promise<ScheduleCoach[]> => {
+  const query = coachClass ? `?coach_class=${encodeURIComponent(coachClass)}` : ''
+  const res = await fetch(`${BASE_URL}/schedules/${scheduleId}/coaches${query}`)
   if (!res.ok) throw new Error('Failed to fetch schedule coaches')
   return res.json()
 }

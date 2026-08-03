@@ -67,15 +67,9 @@ export default function SeatsPage() {
     // Load stations and coaches concurrently
     Promise.all([
       getStations().then(setStations),
-      getScheduleCoaches(scheduleId)
+      getScheduleCoaches(scheduleId, classParam || undefined)
         .then(data => {
-          let filtered = data || []
-          if (classParam) {
-            const matching = filtered.filter(c => c.coach_class?.toUpperCase() === classParam.toUpperCase())
-            if (matching.length > 0) {
-              filtered = matching
-            }
-          }
+          const filtered = data || []
           setCoaches(filtered)
           // If only one matching coach, auto-select it
           if (filtered.length === 1) {
