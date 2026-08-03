@@ -101,26 +101,49 @@
 }
 
 @media print {
+  @page {
+    size: auto;
+    margin: 0mm;
+  }
+
   body {
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-    background-color: #0f172a !important; /* Keep the dark theme for the receipt */
-  }
-
-  /* Hide buttons during print */
-  button {
-    display: none !important;
-  }
-
-  /* Center the receipt and remove margins for clean print */
-  .min-h-screen {
-    min-height: auto !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
     padding: 0 !important;
-  }
-
-  /* Ensure background gradients and effects print */
-  * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* Hide everything except the thermal receipt container */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .printable-thermal-receipt,
+  .printable-thermal-receipt * {
+    visibility: visible !important;
+  }
+
+  .printable-thermal-receipt {
+    position: absolute !important;
+    top: 5mm !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 76mm !important;
+    margin: 0 auto !important;
+    padding: 10px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: 1px dashed #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .no-print {
+    display: none !important;
   }
 }
