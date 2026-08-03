@@ -1,12 +1,43 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { adminListTrains, adminCreateTrain, adminDeleteTrain, adminListTrainCoaches, adminAddCoach, adminUpdateCoach, adminRemoveCoach, AdminTrain, AdminCoach } from '../../services/api'
-import { Plus, X, ChevronDown, ChevronRight, Edit2, Trash2, Armchair, Eye, EyeOff, RefreshCw } from 'lucide-react'
+import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
 
 export default function AdminTrains() {
   const [trains, setTrains] = useState<AdminTrain[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedTrain, setExpandedTrain] = useState<string | null>(null)
+  
+  // Confirm Delete Modal state
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: 'TRAIN' | 'COACH'
+    id: string
+    title: string
+    message: string
+    trainIdForReload?: string
+  } | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return
+    setDeleteLoading(true)
+    try {
+      if (deleteTarget.type === 'TRAIN') {
+        await adminDeleteTrain(deleteTarget.id)
+        loadTrains()
+      } else if (deleteTarget.type === 'COACH') {
+        await adminRemoveCoach(deleteTarget.id)
+        if (deleteTarget.trainIdForReload) {
+          setExpandedTrain(null)
+          setTimeout(() => setExpandedTrain(deleteTarget.trainIdForReload!), 50)
+        }
+      }
+      setDeleteTarget(null)
+    } catch (e) {
+      alert('Failed to delete target')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
   
   // Train Modal
   const [trainModal, setTrainModal] = useState(false)
@@ -49,16 +80,35 @@ export default function AdminTrains() {
     }
   }
 
-  const handleDeleteTrain = async (id: string) => {
-    if (confirm('Delete this train and all its coaches?')) {
-      try {
-        await adminDeleteTrain(id)
-        loadTrains()
-      } catch (e) {
-        alert('Failed')
-      }
-    }
+  const promptDeleteTrain = (t: AdminTrain) => {
+    setDeleteTarget({
+      type: 'TRAIN',
+      id: t.id,
+      title: 'Delete Train',
+      message: `Are you sure you want to delete train #${t.train_number} (${t.name}) and all its coaches? This action cannot be undone.`,
+    })
   }
+
+  const promptRemoveCoach = (coachId: string, coachNo: number, trainId: string) => {
+    setDeleteTarget({
+      type: 'COACH',
+      id: coachId,
+      title: 'Remove Coach',
+      message: `Are you sure you want to remove Coach #${coachNo}? All seat configuration for this coach will be permanently deleted.`,
+      trainIdForReload: trainId,
+    })
+  }
+
+  return (
+    <div>
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        title={deleteTarget?.title || 'Confirm Deletion'}
+        message={deleteTarget?.message || ''}
+        loading={deleteLoading}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
 
   const openAddCoach = (train: AdminTrain) => {
     setActiveTrainForCoach(train)
@@ -132,9 +182,10 @@ export default function AdminTrains() {
               train={t}
               expanded={expandedTrain === t.id}
               onToggle={() => setExpandedTrain(expandedTrain === t.id ? null : t.id)}
-              onDelete={() => handleDeleteTrain(t.id)}
+              onDelete={() => promptDeleteTrain(t)}
               onAddCoach={() => openAddCoach(t)}
               onEditCoach={(c) => openEditCoach(t, c)}
+              onPromptRemoveCoach={(coachId, coachNo) => promptRemoveCoach(coachId, coachNo, t.id)}
             />
           ))}
           {trains.length === 0 && <p className="text-slate-500 text-center py-8">No trains configured.</p>}
@@ -238,7 +289,8 @@ function TrainCard({
   onToggle,
   onDelete,
   onAddCoach,
-  onEditCoach
+  onEditCoach,
+  onPromptRemoveCoach
 }: {
   train: AdminTrain
   expanded: boolean
@@ -246,6 +298,7 @@ function TrainCard({
   onDelete: () => void
   onAddCoach: () => void
   onEditCoach: (coach: AdminCoach) => void
+  onPromptRemoveCoach: (coachId: string, coachNo: number) => void
 }) {
   const [coaches, setCoaches] = useState<AdminCoach[]>([])
   const [loading, setLoading] = useState(false)
@@ -264,13 +317,6 @@ function TrainCard({
   useEffect(() => {
     if (expanded) loadCoaches()
   }, [expanded, train.id])
-
-  const handleRemoveCoach = async (id: string) => {
-    if(confirm('Remove this coach and its seats?')) {
-      await adminRemoveCoach(id)
-      loadCoaches()
-    }
-  }
 
   return (
     <div className="glass-card overflow-hidden">
@@ -367,7 +413,7 @@ function TrainCard({
                                 <button onClick={() => onEditCoach(c)} className="text-xs text-slate-400 hover:text-white flex items-center gap-1">
                                   <Edit2 size={13}/> Edit
                                 </button>
-                                <button onClick={() => handleRemoveCoach(c.id)} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
+                                <button onClick={() => onPromptRemoveCoach(c.id, c.coach_number)} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
                                   <Trash2 size={13}/> Remove
                                 </button>
                               </div>

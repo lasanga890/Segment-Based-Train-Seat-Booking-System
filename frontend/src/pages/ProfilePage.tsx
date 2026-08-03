@@ -28,6 +28,8 @@ import {
 import { useAuth } from '../context/AuthContext'
 import Navbar from '../components/Navbar'
 
+import ConfirmDeleteModal from '../components/ConfirmDeleteModal'
+
 export default function ProfilePage() {
   const { user } = useAuth()
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -36,6 +38,26 @@ export default function ProfilePage() {
 
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Confirm Delete Modal State
+  const [deleteRouteTarget, setDeleteRouteTarget] = useState<FavoriteRoute | null>(null)
+  const [deletingRoute, setDeletingRoute] = useState(false)
+
+  const handleConfirmDeleteRoute = async () => {
+    if (!deleteRouteTarget) return
+    setDeletingRoute(true)
+    try {
+      await deleteFavoriteRoute(deleteRouteTarget.id)
+      setFavoriteRoutes(favoriteRoutes.filter((r) => r.id !== deleteRouteTarget.id))
+      setDeleteRouteTarget(null)
+      setMsg({ type: 'success', text: 'Favorite route deleted.' })
+      setTimeout(() => setMsg(null), 3000)
+    } catch (err: any) {
+      setMsg({ type: 'error', text: err.message || 'Failed to delete favorite route' })
+    } finally {
+      setDeletingRoute(false)
+    }
+  }
 
   // Edit Profile Modal State
   const [showEditModal, setShowEditModal] = useState(false)
@@ -134,6 +156,16 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       <Navbar />
+
+      <ConfirmDeleteModal
+        isOpen={!!deleteRouteTarget}
+        title="Delete Favorite Route"
+        message={deleteRouteTarget ? `Are you sure you want to remove ${deleteRouteTarget.start_station_name} → ${deleteRouteTarget.end_station_name} from your saved favorites?` : ''}
+        confirmText="Delete"
+        loading={deletingRoute}
+        onConfirm={handleConfirmDeleteRoute}
+        onClose={() => setDeleteRouteTarget(null)}
+      />
 
       <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
         {/* Page Header */}
@@ -270,7 +302,7 @@ export default function ProfilePage() {
                           </p>
                         </div>
                         <button
-                          onClick={() => handleDeleteRoute(r.id)}
+                          onClick={() => setDeleteRouteTarget(r)}
                           className="text-slate-500 hover:text-red-400 transition-colors p-2 hover:bg-white/5 rounded-xl"
                           title="Delete Favorite Route"
                         >

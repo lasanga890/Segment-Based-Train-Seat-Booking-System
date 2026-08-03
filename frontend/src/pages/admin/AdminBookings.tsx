@@ -4,6 +4,8 @@ import { adminGetAllBookingsPaginated, adminCancelBooking, adminGetTrains, Booki
 import { Search, Copy, Ban, CheckCircle2, Inbox, Train, RefreshCw } from 'lucide-react'
 import Pagination from '../../components/Pagination'
 
+import ConfirmDeleteModal from '../../components/ConfirmDeleteModal'
+
 const statusColors: Record<string, string> = {
   CONFIRMED: 'bg-green-500/20 text-green-400',
   HOLD:      'bg-amber-500/20 text-amber-400',
@@ -34,6 +36,10 @@ export default function AdminBookings() {
   const [dateF, setDateF]     = useState('')
 
   const [toast, setToast] = useState<string | null>(null)
+
+  // Confirm Delete Modal state
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null)
+  const [cancelLoading, setCancelLoading] = useState(false)
 
   useEffect(() => {
     adminGetTrains()
@@ -76,16 +82,19 @@ export default function AdminBookings() {
     setTimeout(loadBookings, 0)
   }
 
-  const handleCancel = async (b: Booking) => {
-    if(confirm(`Are you sure you want to cancel booking #${b.id.substring(0,8)}? The seat will become immediately available.`)) {
-      try {
-        await adminCancelBooking(b.id)
-        setToast('Booking successfully cancelled.')
-        setTimeout(() => setToast(null), 3000)
-        loadBookings()
-      } catch (e) {
-        alert('Failed to cancel')
-      }
+  const handleConfirmCancel = async () => {
+    if (!cancelTarget) return
+    setCancelLoading(true)
+    try {
+      await adminCancelBooking(cancelTarget.id)
+      setToast('Booking successfully cancelled.')
+      setTimeout(() => setToast(null), 3000)
+      setCancelTarget(null)
+      loadBookings()
+    } catch (e) {
+      alert('Failed to cancel booking')
+    } finally {
+      setCancelLoading(false)
     }
   }
 
@@ -95,6 +104,16 @@ export default function AdminBookings() {
 
   return (
     <div>
+      <ConfirmDeleteModal
+        isOpen={!!cancelTarget}
+        title="Cancel Booking"
+        message={cancelTarget ? `Are you sure you want to cancel booking #${cancelTarget.id.substring(0,8)}? The seat will become immediately available.` : ''}
+        confirmText="Cancel Booking"
+        loading={cancelLoading}
+        onConfirm={handleConfirmCancel}
+        onClose={() => setCancelTarget(null)}
+      />
+
       <AnimatePresence>
         {toast && (
           <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
@@ -232,7 +251,7 @@ export default function AdminBookings() {
                       </td>
                       <td className="px-4 py-3">
                         {(b.status === 'CONFIRMED' || b.status === 'HOLD') && (
-                          <button onClick={() => handleCancel(b)} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 px-2 py-1 rounded">
+                          <button onClick={() => setCancelTarget(b)} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 bg-red-500/10 px-2 py-1 rounded">
                             <Ban size={12}/> Cancel
                           </button>
                         )}
