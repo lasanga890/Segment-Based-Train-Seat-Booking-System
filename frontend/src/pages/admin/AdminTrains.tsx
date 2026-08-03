@@ -99,17 +99,6 @@ export default function AdminTrains() {
     })
   }
 
-  return (
-    <div>
-      <ConfirmDeleteModal
-        isOpen={!!deleteTarget}
-        title={deleteTarget?.title || 'Confirm Deletion'}
-        message={deleteTarget?.message || ''}
-        loading={deleteLoading}
-        onConfirm={handleConfirmDelete}
-        onClose={() => setDeleteTarget(null)}
-      />
-
   const openAddCoach = (train: AdminTrain) => {
     setActiveTrainForCoach(train)
     setEditCoach(null)
@@ -163,6 +152,14 @@ export default function AdminTrains() {
 
   return (
     <div>
+      <ConfirmDeleteModal
+        isOpen={!!deleteTarget}
+        title={deleteTarget?.title || 'Confirm Deletion'}
+        message={deleteTarget?.message || ''}
+        loading={deleteLoading}
+        onConfirm={handleConfirmDelete}
+        onClose={() => setDeleteTarget(null)}
+      />
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-black text-white">Train & Coach Configurator</h2>
         <button onClick={() => { setTrainNo(''); setTrainName(''); setTrainModal(true) }} className="btn-primary flex items-center gap-2">
