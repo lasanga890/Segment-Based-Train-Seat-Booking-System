@@ -129,31 +129,39 @@ export default function AdminSeatBooking() {
     e.preventDefault()
     if (!selectedScheduleId || !startStationId || !endStationId || selectedSeats.length === 0) return
 
+    const startSt = stations.find((s) => s.id === startStationId)
+    const endSt = stations.find((s) => s.id === endStationId)
+    if (!startSt || !endSt) {
+      setToast({ msg: 'Invalid origin or destination station selected', type: 'error' })
+      return
+    }
+
+    const fromSeq = Math.min(startSt.sequence_order, endSt.sequence_order)
+    const toSeq = Math.max(startSt.sequence_order, endSt.sequence_order)
+
     setBookingLoading(true)
     try {
-      // 1. Hold seats
-      const holdItems = selectedSeats.map((s) => ({
+      // 1. Hold seats using correct MultiHoldRequest payload
+      const holdRes = await holdManySeats({
         schedule_id: selectedScheduleId,
-        seat_id: s.seat_id,
-        start_station_id: startStationId,
-        end_station_id: endStationId,
-      }))
+        seat_ids: selectedSeats.map((s) => s.seat_id),
+        from_seq: fromSeq,
+        to_seq: toSeq,
+      })
 
-      const holdRes = await holdManySeats(holdItems)
-      const successHolds = holdRes.filter((h) => h.success)
-
-      if (successHolds.length === 0) {
+      if (!holdRes || holdRes.length === 0) {
         throw new Error('Could not hold selected seats. They might be booked already.')
       }
 
-      // 2. Confirm booking for customer
+      // 2. Confirm booking for each held seat
       let confirmedCount = 0
-      for (const item of successHolds) {
+      for (const item of holdRes) {
         await confirmBooking({
           hold_id: item.hold_id,
           passenger_name: passengerName,
-          passenger_phone: phone,
-          passenger_nic: nicPassport,
+          passenger_email: email.trim() || `${passengerName.toLowerCase().replace(/\s+/g, '.')}@passenger.local`,
+          start_station_id: startStationId,
+          end_station_id: endStationId,
         })
         confirmedCount++
       }
