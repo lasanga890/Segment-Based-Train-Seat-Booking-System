@@ -18,6 +18,7 @@ const AdminStations = lazy(() => import('./pages/admin/AdminStations'))
 const AdminTrains   = lazy(() => import('./pages/admin/AdminTrains'))
 const AdminSchedules= lazy(() => import('./pages/admin/AdminSchedules'))
 const AdminRequests  = lazy(() => import('./pages/admin/AdminRequests'))
+const AdminSeatBooking = lazy(() => import('./pages/admin/AdminSeatBooking'))
 
 function LoadingSpinner() {
   return (
@@ -54,6 +55,7 @@ export default function App() {
               <Route path="trains"    element={<AdminTrains />} />
               <Route path="schedules" element={<AdminSchedules />} />
               <Route path="bookings"  element={<AdminBookings />} />
+              <Route path="seat-booking" element={<AdminSeatBooking />} />
               <Route path="requests"  element={<AdminRequests />} />
             </Route>
 

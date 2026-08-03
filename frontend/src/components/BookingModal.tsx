@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { X, Clock, CheckCircle, AlertCircle, Train, Armchair, UserCheck, LogIn, UserPlus, Users } from 'lucide-react'
+import { X, Clock, CheckCircle, AlertCircle, Train, Armchair, UserCheck, LogIn, UserPlus, User } from 'lucide-react'
 import { confirmBooking, releaseHold, getFrequentPassengers, type SeatAvailability, type Station, type MultiHoldItem, type FrequentPassenger } from '../services/api'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
@@ -17,14 +17,15 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
   const navigate = useNavigate()
   const { user, loginUser, registerUser } = useAuth()
 
-  const [name, setName]     = useState(user?.name || '')
-  const [email, setEmail]   = useState(user?.email || '')
+  const [name, setName] = useState(user?.name || '')
+  const [email, setEmail] = useState(user?.email || '')
   const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [error, setError] = useState('')
   const [timeLeft, setTimeLeft] = useState(300)
   const timerRef = useRef<ReturnType<typeof setInterval>>()
 
-  // Auth sub-form state for unauthenticated users
+  // Optional inline auth toggle for guests
+  const [showAuthForm, setShowAuthForm] = useState(false)
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
@@ -78,6 +79,7 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
       } else {
         await registerUser({ name: authName, email: authEmail, password: authPassword, phone: authPhone })
       }
+      setShowAuthForm(false)
     } catch (err: any) {
       setAuthError(err.message || 'Authentication failed')
     } finally {
@@ -87,28 +89,24 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
 
   const handleConfirm = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) {
-      setAuthError('Please log in or register to complete your booking')
-      return
-    }
     if (!name.trim()) { setError('Passenger name is required'); return }
 
     setLoading(true)
     setError('')
     try {
-      // Confirm all holds — each becomes a separate booking row per seat
+      // Confirm all holds — both guests and logged-in users can book!
       const bookingPromises = holds.map(h =>
         confirmBooking({
-          hold_id:          h.hold_id,
-          passenger_name:   name.trim(),
-          passenger_email:  email.trim(),
+          hold_id: h.hold_id,
+          passenger_name: name.trim(),
+          passenger_email: email.trim(),
           start_station_id: fromStation.id,
-          end_station_id:   toStation.id,
-          user_id:          user.id,
+          end_station_id: toStation.id,
+          user_id: user?.id,
         })
       )
       const bookings = await Promise.all(bookingPromises)
-      // Navigate to confirmation page with first booking ID
+      // Navigate to confirmation page with state
       navigate(`/booking/${bookings[0].id}`, {
         state: { allBookings: bookings }
       })
@@ -161,7 +159,7 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
         </div>
 
         <div className="overflow-y-auto flex-1">
-          {/* ── Route & Seats ───────────────────────────────────────── */}
+          {/* ── Route & Seats Summary ───────────────────────────────────────── */}
           <div className="p-5 bg-slate-800/50">
             <div className="flex items-center gap-2 text-sm mb-4">
               <span className="text-slate-300 font-medium">{fromStation.name}</span>
@@ -201,129 +199,116 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
             </div>
           </div>
 
-          {/* ── Authentication Requirement / Form ─────────────────────── */}
-          {!user ? (
-            <div className="p-5 border-t border-white/5 space-y-4">
-              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-center gap-2">
-                <AlertCircle size={16} className="shrink-0" />
-                <span>An account is required to confirm your booking. Please log in or register below. Your seat hold timer is active!</span>
-              </div>
-
-              {/* Mode Toggle */}
-              <div className="flex bg-slate-950 p-1 rounded-xl border border-white/5">
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('LOGIN')}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                    authMode === 'LOGIN' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Log In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('REGISTER')}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
-                    authMode === 'REGISTER' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Create Account
-                </button>
-              </div>
-
-              {authError && (
-                <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs">
-                  {authError}
-                </div>
-              )}
-
-              <form onSubmit={handleInlineAuth} className="space-y-3">
-                {authMode === 'REGISTER' && (
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Full Name</label>
-                    <input
-                      type="text"
-                      required
-                      className="input-field text-xs py-2"
-                      placeholder="Kamal Perera"
-                      value={authName}
-                      onChange={e => setAuthName(e.target.value)}
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    className="input-field text-xs py-2"
-                    placeholder="passenger@example.com"
-                    value={authEmail}
-                    onChange={e => setAuthEmail(e.target.value)}
-                  />
-                </div>
-
-                {authMode === 'REGISTER' && (
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">Phone Number (Optional)</label>
-                    <input
-                      type="tel"
-                      className="input-field text-xs py-2"
-                      placeholder="+94 77 123 4567"
-                      value={authPhone}
-                      onChange={e => setAuthPhone(e.target.value)}
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Password</label>
-                  <input
-                    type="password"
-                    required
-                    className="input-field text-xs py-2"
-                    placeholder="••••••••"
-                    value={authPassword}
-                    onChange={e => setAuthPassword(e.target.value)}
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={authLoading}
-                  className="btn-primary w-full py-2.5 text-xs font-bold flex justify-center items-center gap-1.5 mt-2"
-                >
-                  {authLoading ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : authMode === 'LOGIN' ? (
-                    <><LogIn size={14} /> Log In & Continue</>
-                  ) : (
-                    <><UserPlus size={14} /> Register & Continue</>
-                  )}
-                </button>
-              </form>
-            </div>
-          ) : (
-            /* Logged in Passenger Form */
-            <form id="confirm-form" onSubmit={handleConfirm} className="p-5 space-y-4">
+          {/* ── Guest or Logged In Passenger Form ──────────────────────── */}
+          <div className="p-5 space-y-4">
+            {user ? (
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <UserCheck size={16} />
                   <span>Logged in as <strong>{user.name}</strong> ({user.email})</span>
                 </div>
               </div>
-
-              {error && (
-                <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
-                  <AlertCircle size={14} className="mt-0.5 shrink-0" />
-                  {error}
+            ) : (
+              <div className="p-3 bg-slate-800/80 border border-white/10 rounded-xl text-xs flex items-center justify-between">
+                <div className="flex items-center gap-2 text-slate-300">
+                  <User size={15} className="text-brand-400" />
+                  <span>Booking as <strong>Guest Passenger</strong></span>
                 </div>
-              )}
+                <button
+                  type="button"
+                  onClick={() => setShowAuthForm(!showAuthForm)}
+                  className="text-brand-400 hover:underline text-[11px] font-bold"
+                >
+                  {showAuthForm ? 'Close Login' : 'Log In / Register'}
+                </button>
+              </div>
+            )}
 
+            {/* Optional Inline Auth Form for Guest wanting to login */}
+            {!user && showAuthForm && (
+              <div className="p-4 bg-slate-950 border border-white/10 rounded-xl space-y-3">
+                <div className="flex bg-slate-900 p-1 rounded-xl border border-white/5">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('LOGIN')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                      authMode === 'LOGIN' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Log In
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode('REGISTER')}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                      authMode === 'REGISTER' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Create Account
+                  </button>
+                </div>
+
+                {authError && (
+                  <div className="p-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs">
+                    {authError}
+                  </div>
+                )}
+
+                <form onSubmit={handleInlineAuth} className="space-y-2.5">
+                  {authMode === 'REGISTER' && (
+                    <input
+                      type="text"
+                      required
+                      className="input-field text-xs py-2"
+                      placeholder="Full Name"
+                      value={authName}
+                      onChange={e => setAuthName(e.target.value)}
+                    />
+                  )}
+                  <input
+                    type="email"
+                    required
+                    className="input-field text-xs py-2"
+                    placeholder="Email Address"
+                    value={authEmail}
+                    onChange={e => setAuthEmail(e.target.value)}
+                  />
+                  <input
+                    type="password"
+                    required
+                    className="input-field text-xs py-2"
+                    placeholder="Password"
+                    value={authPassword}
+                    onChange={e => setAuthPassword(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    disabled={authLoading}
+                    className="btn-primary w-full py-2 text-xs font-bold flex justify-center items-center gap-1.5"
+                  >
+                    {authLoading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : authMode === 'LOGIN' ? (
+                      <><LogIn size={13} /> Log In</>
+                    ) : (
+                      <><UserPlus size={13} /> Register</>
+                    )}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {error && (
+              <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs">
+                <AlertCircle size={14} className="mt-0.5 shrink-0" />
+                {error}
+              </div>
+            )}
+
+            <form id="confirm-form" onSubmit={handleConfirm} className="space-y-3">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Passenger Name <span className="text-red-400">*</span>
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Passenger Full Name <span className="text-red-400">*</span>
                 </label>
                 <input
                   id="passenger-name"
@@ -337,8 +322,8 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5">
-                  Email
+                <label className="block text-xs font-medium text-slate-400 mb-1">
+                  Email Address (for ticket receipt)
                 </label>
                 <input
                   id="passenger-email"
@@ -347,41 +332,44 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
                   placeholder="kamal@example.com"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  required
                 />
               </div>
+
+              {!user && (
+                <p className="text-[11px] text-slate-500 italic pt-1">
+                  Note: Guests can confirm & print tickets immediately. To view and track your booking history anytime in your profile, log in before booking.
+                </p>
+              )}
             </form>
-          )}
+          </div>
         </div>
 
-        {/* ── Actions ─────────────────────────────────────────────────── */}
-        {user && (
-          <div className="p-5 border-t border-white/5 flex gap-3 flex-shrink-0">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="btn-secondary flex-1 text-sm py-2.5"
-            >
-              Cancel
-            </button>
-            <button
-              id="confirm-booking-btn"
-              type="submit"
-              form="confirm-form"
-              disabled={loading || timeLeft === 0}
-              className="btn-primary flex-1 text-sm flex items-center justify-center gap-2 font-bold py-2.5"
-            >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <CheckCircle size={16} />
-                  Confirm {holds.length > 1 ? `${holds.length} Bookings` : 'Booking'}
-                </>
-              )}
-            </button>
-          </div>
-        )}
+        {/* ── Action Buttons ───────────────────────────────────────────── */}
+        <div className="p-5 border-t border-white/5 flex gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleClose}
+            className="btn-secondary flex-1 text-sm py-2.5"
+          >
+            Cancel
+          </button>
+          <button
+            id="confirm-booking-btn"
+            type="submit"
+            form="confirm-form"
+            disabled={loading || timeLeft === 0 || !name.trim()}
+            className="btn-primary flex-1 text-sm flex items-center justify-center gap-2 font-bold py-2.5"
+          >
+            {loading ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <>
+                <CheckCircle size={16} />
+                Confirm {holds.length > 1 ? `${holds.length} Bookings` : 'Booking'}
+              </>
+            )}
+          </button>
+        </div>
       </motion.div>
     </motion.div>
   )

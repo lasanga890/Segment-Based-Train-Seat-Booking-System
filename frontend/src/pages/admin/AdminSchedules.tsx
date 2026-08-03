@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { adminListSchedulesPaginated, adminCreateSchedule, adminToggleScheduleStatus, adminListTrains, AdminSchedule, AdminTrain } from '../../services/api'
-import { Plus, X, Search, Clock, Ban, CheckCircle, ChevronDown, ChevronRight, Layers, Calendar } from 'lucide-react'
+import { Plus, X, Search, Clock, Ban, CheckCircle, ChevronDown, ChevronRight, Layers, Calendar, RefreshCw } from 'lucide-react'
 import Pagination from '../../components/Pagination'
 
 interface ScheduleGroup {
@@ -233,6 +233,11 @@ export default function AdminSchedules() {
         <div className="flex justify-center py-12"><div className="w-8 h-8 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" /></div>
       ) : (
         <div className="glass-card overflow-hidden">
+          <div className="flex justify-end border-b border-white/5 px-3 py-2">
+            <button onClick={loadSchedules} disabled={loading} aria-label="Refresh schedules" title="Refresh table data" className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

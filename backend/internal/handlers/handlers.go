@@ -51,16 +51,18 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 		r.Post("/auth/user/login", h.UserLogin)
 		r.With(h.UserAuthMiddleware).Get("/auth/user/me", h.GetUserMe)
 
-		// Bookings
+		// Bookings (Both guests & authenticated users can hold and confirm seats)
 		r.With(h.UserAuthMiddleware).Post("/bookings/hold", h.HoldSeat)
 		r.With(h.UserAuthMiddleware).Post("/bookings/hold-many", h.HoldManySeats)
 		r.With(h.UserAuthMiddleware).Post("/bookings/confirm", h.ConfirmBooking)
 		r.Delete("/bookings/hold/{holdId}", h.ReleaseHold)
-		r.Get("/bookings/{id}", h.GetBooking)
 
-		// Passenger Profile & Dashboard Routes
+		// Restrict viewing booking details to logged-in users only
+		r.With(h.RequireUserAuthMiddleware).Get("/bookings/{id}", h.GetBooking)
+
+		// Passenger Profile & Dashboard Routes (Require logged-in user authentication)
 		r.Route("/user", func(r chi.Router) {
-			r.Use(h.UserAuthMiddleware)
+			r.Use(h.RequireUserAuthMiddleware)
 			r.Get("/profile", h.GetUserProfile)
 			r.Put("/profile", h.UpdateUserProfile)
 

@@ -7,6 +7,7 @@ import {
   type SeatAvailability, type Station, type MultiHoldItem, type ScheduleCoach
 } from '../services/api'
 import BookingModal from '../components/BookingModal'
+import TrainCoachSeatMap from '../components/TrainCoachSeatMap'
 
 export default function SeatsPage() {
   const [searchParams] = useSearchParams()
@@ -14,6 +15,7 @@ export default function SeatsPage() {
   const fromParam = searchParams.get('from')
   const toParam = searchParams.get('to')
   const scheduleId = searchParams.get('schedule_id')
+  const classParam = searchParams.get('class') || searchParams.get('coach_class')
   const fromSeq = fromParam !== null && fromParam !== '' ? parseInt(fromParam) : -1
   const toSeq   = toParam !== null && toParam !== '' ? parseInt(toParam) : -1
 
@@ -67,15 +69,22 @@ export default function SeatsPage() {
       getStations().then(setStations),
       getScheduleCoaches(scheduleId)
         .then(data => {
-          setCoaches(data)
-          // If only one coach, auto-select it
-          if (data.length === 1) {
-            setSelectedCoach(data[0])
+          let filtered = data || []
+          if (classParam) {
+            const matching = filtered.filter(c => c.coach_class?.toUpperCase() === classParam.toUpperCase())
+            if (matching.length > 0) {
+              filtered = matching
+            }
+          }
+          setCoaches(filtered)
+          // If only one matching coach, auto-select it
+          if (filtered.length === 1) {
+            setSelectedCoach(filtered[0])
           }
         })
         .catch(console.error)
     ]).finally(() => setCoachesLoading(false))
-  }, [fromSeq, toSeq, scheduleId, navigate])
+  }, [fromSeq, toSeq, scheduleId, classParam, navigate])
 
   // Load seats whenever a coach is confirmed
   const loadSeats = (coach: ScheduleCoach) => {
@@ -409,37 +418,14 @@ export default function SeatsPage() {
                   </span>
                 </div>
 
-                {/* Seat Grid */}
-                <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(44px, 1fr))' }}>
-                  {coachSeats.map(seat => {
-                    const selected = isSelected(seat)
-                    return (
-                      <motion.button
-                        key={seat.seat_id}
-                        id={`seat-${coachNum}-${seat.seat_number}`}
-                        whileHover={seat.status !== 'occupied' ? { scale: 1.12 } : {}}
-                        whileTap={seat.status !== 'occupied' ? { scale: 0.95 } : {}}
-                        onClick={() => handleSeatClick(seat)}
-                        disabled={seat.status === 'occupied' || holdLoading}
-                        className={`
-                          w-11 h-11 rounded-lg flex items-center justify-center text-xs font-bold
-                          border-2 transition-all duration-150 select-none
-                          ${selected
-                            ? 'bg-seat-selected border-seat-selected text-white ring-2 ring-seat-selected/50 ring-offset-2 ring-offset-slate-950 scale-105'
-                            : seat.status === 'available'
-                              ? 'bg-seat-available/15 border-seat-available text-seat-available hover:bg-seat-available hover:text-white cursor-pointer'
-                              : seat.status === 'partial'
-                                ? 'bg-seat-partial/15 border-seat-partial text-seat-partial hover:bg-seat-partial hover:text-white cursor-pointer'
-                                : 'bg-seat-occupied/10 border-seat-occupied/30 text-seat-occupied/50 cursor-not-allowed'
-                          }
-                        `}
-                        title={`Seat ${seat.seat_number} — ${selected ? 'Selected' : seat.status}`}
-                      >
-                        {seat.seat_number}
-                      </motion.button>
-                    )
-                  })}
-                </div>
+                {/* Realistic Sri Lankan Train Seat Map (3x2 3rd Class / 2x2 2nd Class Face-to-Face) */}
+                <TrainCoachSeatMap
+                  seats={coachSeats}
+                  coachClass={selectedCoach?.coach_class || 'THIRD'}
+                  selectedSeats={selectedSeats}
+                  onSeatClick={handleSeatClick}
+                  disabled={holdLoading}
+                />
               </motion.div>
             ))}
             {!loading && Object.keys(seatsByCoach).length === 0 && !showCoachModal && (

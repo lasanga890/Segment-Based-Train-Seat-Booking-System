@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { adminListTrains, adminCreateTrain, adminDeleteTrain, adminListTrainCoaches, adminAddCoach, adminUpdateCoach, adminRemoveCoach, AdminTrain, AdminCoach } from '../../services/api'
-import { Plus, X, ChevronDown, ChevronRight, Edit2, Trash2, Armchair, Eye, EyeOff } from 'lucide-react'
+import { Plus, X, ChevronDown, ChevronRight, Edit2, Trash2, Armchair, Eye, EyeOff, RefreshCw } from 'lucide-react'
 
 export default function AdminTrains() {
   const [trains, setTrains] = useState<AdminTrain[]>([])
@@ -299,9 +299,14 @@ function TrainCard({
                 <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                   <Armchair size={16} className="text-brand-400" /> Train Coaches & Capacity
                 </h4>
-                <button onClick={onAddCoach} className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1">
-                  <Plus size={14}/> Add Coach
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={loadCoaches} disabled={loading} aria-label={`Refresh coaches for ${train.name}`} title="Refresh table data" className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                  </button>
+                  <button onClick={onAddCoach} className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1">
+                    <Plus size={14}/> Add Coach
+                  </button>
+                </div>
               </div>
               
               {loading ? (

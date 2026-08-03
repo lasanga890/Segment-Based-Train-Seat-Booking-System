@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { adminGetAllBookingsPaginated, adminCancelBooking, adminGetTrains, Booking, AdminTrain } from '../../services/api'
-import { Search, Copy, Ban, CheckCircle2, Inbox, Train } from 'lucide-react'
+import { Search, Copy, Ban, CheckCircle2, Inbox, Train, RefreshCw } from 'lucide-react'
 import Pagination from '../../components/Pagination'
 
 const statusColors: Record<string, string> = {
@@ -158,6 +158,11 @@ export default function AdminBookings() {
         </div>
       ) : (
         <div className="glass-card overflow-hidden">
+          <div className="flex justify-end border-b border-white/5 px-3 py-2">
+            <button onClick={loadBookings} disabled={loading} aria-label="Refresh bookings" title="Refresh table data" className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

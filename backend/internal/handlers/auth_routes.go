@@ -43,7 +43,7 @@ func (h *Handler) AdminAuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// UserAuthMiddleware (Optional helper to extract user from token if present)
+// UserAuthMiddleware (Optional helper to extract user from token if present for guest + user operations)
 func (h *Handler) UserAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -58,6 +58,33 @@ func (h *Handler) UserAuthMiddleware(next http.Handler) http.Handler {
 			}
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+// RequireUserAuthMiddleware enforces strict JWT user authentication for viewing booking details.
+func (h *Handler) RequireUserAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			writeError(w, http.StatusUnauthorized, "Authentication required. Please log in to view booking details.")
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+			writeError(w, http.StatusUnauthorized, "Invalid Authorization header format")
+			return
+		}
+
+		tokenStr := parts[1]
+		claims, err := auth.ValidateToken(tokenStr, h.cfg.JWTSecret)
+		if err != nil || claims.Role != "USER" {
+			writeError(w, http.StatusUnauthorized, "Unauthorized: Invalid or expired user token")
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), UserClaimsKey, claims)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 

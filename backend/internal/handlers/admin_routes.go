@@ -460,7 +460,7 @@ func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	startDate, err1 := parseScheduleDate(req.StartDate)
 	endDate, err2 := parseScheduleDate(req.EndDate)
-	
+
 	if err1 != nil || err2 != nil || startDate.Before(todayUTC()) || endDate.Before(startDate) {
 		writeError(w, http.StatusBadRequest, "start_date and end_date must be valid YYYY-MM-DD dates, today or later, and end_date must not be before start_date")
 		return
@@ -503,7 +503,7 @@ func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	
+
 	if err := tx.Commit(r.Context()); err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to commit schedules")
 		return
@@ -573,7 +573,7 @@ func (h *Handler) ToggleScheduleStatus(w http.ResponseWriter, r *http.Request) {
 		SET is_active = $1, cancel_reason = $2 
 		WHERE id = $3
 	`, req.IsActive, reason, id)
-	
+
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to update schedule status")
 		return
@@ -795,30 +795,49 @@ func (h *Handler) ListRefundRequests(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ApproveRefundRequest(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var req struct { AdminNote string `json:"admin_note"` }
+	var req struct {
+		AdminNote string `json:"admin_note"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	tx, err := h.db.Begin(r.Context())
-	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to start transaction"); return }
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to start transaction")
+		return
+	}
 	defer tx.Rollback(r.Context())
 
 	var bookingID string
 	err = tx.QueryRow(r.Context(), `SELECT booking_id::text FROM refund_requests WHERE id = $1`, id).Scan(&bookingID)
-	if err != nil { writeError(w, http.StatusNotFound, "Refund request not found"); return }
+	if err != nil {
+		writeError(w, http.StatusNotFound, "Refund request not found")
+		return
+	}
 
 	_, err = tx.Exec(r.Context(), `UPDATE refund_requests SET status = 'APPROVED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
-	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to approve refund request: "+err.Error()); return }
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to approve refund request: "+err.Error())
+		return
+	}
 
 	_, err = tx.Exec(r.Context(), `UPDATE bookings SET status = 'CANCELLED' WHERE id = $1`, bookingID)
-	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to cancel refunded booking: "+err.Error()); return }
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to cancel refunded booking: "+err.Error())
+		return
+	}
 
-	if err := tx.Commit(r.Context()); err != nil { writeError(w, http.StatusInternalServerError, "Failed to commit transaction"); return }
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to commit transaction")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
 }
 
 func (h *Handler) RejectRefundRequest(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var req struct { AdminNote string `json:"admin_note"` }
+	var req struct {
+		AdminNote string `json:"admin_note"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	_, err := h.db.Exec(r.Context(), `UPDATE refund_requests SET status = 'REJECTED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
@@ -884,18 +903,31 @@ func (h *Handler) ListRescheduleRequests(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
-		if decAt != nil { s := fmt.Sprintf("%v", decAt); it.DecidedAt = &s }
-		if depDate != nil { s := fmt.Sprintf("%v", depDate); it.DepartureDate = &s }
-		if depTime != nil { s := fmt.Sprintf("%v", depTime); it.DepartureTime = &s }
+		if decAt != nil {
+			s := fmt.Sprintf("%v", decAt)
+			it.DecidedAt = &s
+		}
+		if depDate != nil {
+			s := fmt.Sprintf("%v", depDate)
+			it.DepartureDate = &s
+		}
+		if depTime != nil {
+			s := fmt.Sprintf("%v", depTime)
+			it.DepartureTime = &s
+		}
 		list = append(list, it)
 	}
-	if list == nil { list = []rrow{} }
+	if list == nil {
+		list = []rrow{}
+	}
 	writeJSON(w, http.StatusOK, list)
 }
 
 func (h *Handler) ApproveRescheduleRequest(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var req struct { AdminNote string `json:"admin_note"` }
+	var req struct {
+		AdminNote string `json:"admin_note"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	// Fetch request details
@@ -908,13 +940,19 @@ func (h *Handler) ApproveRescheduleRequest(w http.ResponseWriter, r *http.Reques
 
 	// Begin transaction to update booking and mark request approved
 	tx, err := h.db.Begin(r.Context())
-	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to start transaction"); return }
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to start transaction")
+		return
+	}
 	defer tx.Rollback(r.Context())
 
 	// Update booking with provided fields
 	if newScheduleID != nil && *newScheduleID != "" {
 		_, err = tx.Exec(r.Context(), `UPDATE bookings SET schedule_id = $1 WHERE id = $2`, *newScheduleID, *bookingID)
-		if err != nil { writeError(w, http.StatusInternalServerError, "Failed to update booking schedule"); return }
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to update booking schedule")
+			return
+		}
 	}
 	if newStartID != nil && *newStartID != "" && newEndID != nil && *newEndID != "" {
 		// fetch sequence orders for stations
@@ -928,24 +966,38 @@ func (h *Handler) ApproveRescheduleRequest(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		_, err = tx.Exec(r.Context(), `UPDATE bookings SET start_station_id = $1, end_station_id = $2, start_seq = $3, end_seq = $4 WHERE id = $5`, *newStartID, *newEndID, startSeq, endSeq, *bookingID)
-		if err != nil { writeError(w, http.StatusInternalServerError, "Failed to update booking stations"); return }
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to update booking stations")
+			return
+		}
 	}
 	if newSeatID != nil && *newSeatID != "" {
 		_, err = tx.Exec(r.Context(), `UPDATE bookings SET seat_id = $1 WHERE id = $2`, *newSeatID, *bookingID)
-		if err != nil { writeError(w, http.StatusInternalServerError, "Failed to update booking seat"); return }
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to update booking seat")
+			return
+		}
 	}
 
 	_, err = tx.Exec(r.Context(), `UPDATE reschedule_requests SET status = 'APPROVED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)
-	if err != nil { writeError(w, http.StatusInternalServerError, "Failed to mark reschedule request approved"); return }
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to mark reschedule request approved")
+		return
+	}
 
-	if err := tx.Commit(r.Context()); err != nil { writeError(w, http.StatusInternalServerError, "Failed to commit changes"); return }
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to commit changes")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "approved"})
 }
 
 func (h *Handler) RejectRescheduleRequest(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var req struct { AdminNote string `json:"admin_note"` }
+	var req struct {
+		AdminNote string `json:"admin_note"`
+	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	_, err := h.db.Exec(r.Context(), `UPDATE reschedule_requests SET status = 'REJECTED', admin_note = $1, decided_at = now() WHERE id = $2`, req.AdminNote, id)

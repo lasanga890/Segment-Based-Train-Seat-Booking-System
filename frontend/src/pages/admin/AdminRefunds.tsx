@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { adminGetRefundRequests, adminApproveRefundRequest } from '../../services/api'
-import { CheckCircle2, Inbox } from 'lucide-react'
+import { CheckCircle2, Inbox, RefreshCw } from 'lucide-react'
 
 export default function AdminRefunds(){
   const [requests, setRequests] = useState<any[]>([])
@@ -42,6 +42,11 @@ export default function AdminRefunds(){
         <div className="py-20 text-center text-slate-400">Loading…</div>
       ) : (
         <div className="glass-card overflow-auto">
+          <div className="flex justify-end border-b border-white/5 px-3 py-2">
+            <button onClick={load} disabled={loading} aria-label="Refresh refund requests" title="Refresh table data" className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
           {requests.length === 0 ? (
             <div className="p-8 text-center text-slate-500">
               <Inbox size={36} className="mx-auto mb-2 opacity-40" /> <div>No refund requests</div>

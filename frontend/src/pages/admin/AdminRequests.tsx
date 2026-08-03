@@ -5,12 +5,11 @@ import {
   CheckCircle2,
   XCircle,
   Search,
-  ArrowRight,
   DollarSign,
   Calendar,
   AlertCircle,
   X,
-  FileText,
+  RefreshCw,
 } from 'lucide-react'
 import {
   adminGetRefundRequests,
@@ -249,11 +248,22 @@ export default function AdminRequests() {
       ) : activeTab === 'RESCHEDULE' ? (
         /* ── TABLE 1: RESCHEDULE REQUESTS ── */
         <div className="glass-card overflow-hidden border border-white/10 rounded-2xl">
+          <div className="flex justify-end border-b border-white/5 px-3 py-2">
+            <button
+              onClick={loadRequests}
+              disabled={loading}
+              aria-label="Refresh passenger requests"
+              title="Refresh table data"
+              className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="border-b border-white/10 bg-slate-900/60">
-                  {['Req ID', 'Passenger', 'Booking ID', 'Original Schedule', 'Requested Route & Date', 'Status', 'Admin Note', 'Actions'].map((h) => (
+                  {['Req ID', 'Passenger', 'Booking ID', 'Original Schedule', 'Requested Route & Date', 'Status', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">
                       {h}
                     </th>
@@ -263,7 +273,7 @@ export default function AdminRequests() {
               <tbody>
                 {filteredReschedules.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-12 text-center text-slate-500 text-sm">
+                    <td colSpan={7} className="px-4 py-12 text-center text-slate-500 text-sm">
                       No reschedule requests found
                     </td>
                   </tr>
@@ -305,9 +315,6 @@ export default function AdminRequests() {
                           {r.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-400 italic max-w-xs truncate">
-                        {r.admin_note ? `"${r.admin_note}"` : '-'}
-                      </td>
                       <td className="px-4 py-3">
                         {r.status === 'PENDING' ? (
                           <div className="flex items-center gap-2">
@@ -320,9 +327,11 @@ export default function AdminRequests() {
                                   passenger: r.passenger_name,
                                 })
                               }
-                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                              aria-label={`Approve ${r.passenger_name}'s reschedule request`}
+                              title="Approve request"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg transition-colors"
                             >
-                              <CheckCircle2 size={13} /> Approve
+                              <CheckCircle2 size={16} />
                             </button>
                             <button
                               onClick={() =>
@@ -333,9 +342,11 @@ export default function AdminRequests() {
                                   passenger: r.passenger_name,
                                 })
                               }
-                              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                              aria-label={`Reject ${r.passenger_name}'s reschedule request`}
+                              title="Reject request"
+                              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 p-2 rounded-lg transition-colors"
                             >
-                              <XCircle size={13} /> Reject
+                              <XCircle size={16} />
                             </button>
                           </div>
                         ) : (
@@ -352,11 +363,22 @@ export default function AdminRequests() {
       ) : (
         /* ── TABLE 2: REFUND REQUESTS ── */
         <div className="glass-card overflow-hidden border border-white/10 rounded-2xl">
+          <div className="flex justify-end border-b border-white/5 px-3 py-2">
+            <button
+              onClick={loadRequests}
+              disabled={loading}
+              aria-label="Refresh passenger requests"
+              title="Refresh table data"
+              className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
               <thead>
                 <tr className="border-b border-white/10 bg-slate-900/60">
-                  {['Req ID', 'Passenger', 'Booking ID', 'Original Fare', 'Refundable (LKR)', 'Departure Date', 'Status', 'Admin Note', 'Actions'].map((h) => (
+                  {['Req ID', 'Passenger', 'Booking ID', 'Original Fare', 'Refundable (LKR)', 'Departure Date', 'Status', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-3.5 text-xs font-semibold text-slate-400 uppercase tracking-wide">
                       {h}
                     </th>
@@ -366,7 +388,7 @@ export default function AdminRequests() {
               <tbody>
                 {filteredRefunds.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-slate-500 text-sm">
+                    <td colSpan={8} className="px-4 py-12 text-center text-slate-500 text-sm">
                       No refund requests found
                     </td>
                   </tr>
@@ -398,9 +420,6 @@ export default function AdminRequests() {
                           {r.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-400 italic max-w-xs truncate">
-                        {r.admin_note ? `"${r.admin_note}"` : '-'}
-                      </td>
                       <td className="px-4 py-3">
                         {r.status === 'PENDING' ? (
                           <div className="flex items-center gap-2">
@@ -413,9 +432,11 @@ export default function AdminRequests() {
                                   passenger: r.passenger_name,
                                 })
                               }
-                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                              aria-label={`Approve ${r.passenger_name}'s refund request`}
+                              title="Approve request"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg transition-colors"
                             >
-                              <CheckCircle2 size={13} /> Approve
+                              <CheckCircle2 size={16} />
                             </button>
                             <button
                               onClick={() =>
@@ -426,9 +447,11 @@ export default function AdminRequests() {
                                   passenger: r.passenger_name,
                                 })
                               }
-                              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-lg text-xs font-bold transition-colors flex items-center gap-1"
+                              aria-label={`Reject ${r.passenger_name}'s refund request`}
+                              title="Reject request"
+                              className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 p-2 rounded-lg transition-colors"
                             >
-                              <XCircle size={13} /> Reject
+                              <XCircle size={16} />
                             </button>
                           </div>
                         ) : (

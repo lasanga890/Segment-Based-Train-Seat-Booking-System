@@ -21,10 +21,13 @@ export default function BookingPage() {
       setBookings(stateBookings)
       setLoading(false)
     } else {
-      // Fallback: fetch single booking from backend
+      // Fallback: fetch single booking from backend (restricted to logged-in users)
       getBooking(id)
         .then(b => setBookings([b]))
-        .catch(() => navigate('/'))
+        .catch(() => {
+          alert('Viewing booking details is restricted to logged-in users. Please log in to view.')
+          navigate('/login')
+        })
         .finally(() => setLoading(false))
     }
   }, [id])

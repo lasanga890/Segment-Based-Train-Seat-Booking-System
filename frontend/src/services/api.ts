@@ -450,6 +450,13 @@ export const adminToggleScheduleStatus = async (id: string, is_active: boolean, 
   if (!res.ok) throw new Error('Failed to update schedule status')
   return res.json()
 }
+export const adminListSchedules = async (params?: {date_from?:string, date_to?:string, direction?:string}): Promise<AdminSchedule[]> => {
+  const query = new URLSearchParams(params as any).toString()
+  const res = await authFetch(`${BASE_URL}/admin/schedules${query ? `?${query}` : ''}`)
+  if (!res.ok) throw new Error('Failed to fetch schedules')
+  const data = await res.json()
+  return Array.isArray(data) ? data : data.data || []
+}
 export interface PaginatedResponse<T> {
   data: T[]
   total: number

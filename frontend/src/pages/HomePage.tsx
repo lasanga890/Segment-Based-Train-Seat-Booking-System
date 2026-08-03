@@ -71,7 +71,8 @@ export default function HomePage() {
   const handleProceedBooking = (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedScheduleId || !fromSeq || !toSeq) return
-    navigate(`/seats?schedule_id=${selectedScheduleId}&from=${fromSeq}&to=${toSeq}`)
+    const classQuery = selectedClass ? `&class=${selectedClass}` : ''
+    navigate(`/seats?schedule_id=${selectedScheduleId}&from=${fromSeq}&to=${toSeq}${classQuery}`)
   }
 
   const validDestinations = stations.filter(s => s.sequence_order !== parseInt(fromSeq || '-1'))

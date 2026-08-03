@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getStationsPaginated, adminCreateStation, adminUpdateStation, adminToggleStationStatus, AdminStation } from '../../services/api'
-import { Edit2, Plus, X, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Edit2, Plus, X, AlertCircle, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react'
 import Pagination from '../../components/Pagination'
 
 function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -155,6 +155,11 @@ export default function AdminStations() {
         </div>
       ) : (
         <div className="glass-card overflow-hidden">
+          <div className="flex justify-end border-b border-white/5 px-3 py-2">
+            <button onClick={loadStations} disabled={loading} aria-label="Refresh stations" title="Refresh table data" className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50">
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
