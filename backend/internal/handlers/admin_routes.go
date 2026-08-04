@@ -735,6 +735,63 @@ func (h *Handler) GetRevenueAnalytics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+func (h *Handler) GetBookingChartAnalytics(w http.ResponseWriter, r *http.Request) {
+	period := r.URL.Query().Get("groupby")
+	if period != "month" {
+		period = "day"
+	}
+
+	var query string
+	if period == "month" {
+		query = `
+			SELECT 
+				TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS label,
+				COUNT(*) AS bookings_count,
+				COALESCE(SUM(fare_lkr), 0) AS total_revenue
+			FROM bookings
+			WHERE created_at >= NOW() - INTERVAL '12 months' AND status = 'CONFIRMED'
+			GROUP BY DATE_TRUNC('month', created_at)
+			ORDER BY DATE_TRUNC('month', created_at) ASC
+		`
+	} else {
+		query = `
+			SELECT 
+				TO_CHAR(DATE_TRUNC('day', created_at), 'YYYY-MM-DD') AS label,
+				COUNT(*) AS bookings_count,
+				COALESCE(SUM(fare_lkr), 0) AS total_revenue
+			FROM bookings
+			WHERE created_at >= NOW() - INTERVAL '30 days' AND status = 'CONFIRMED'
+			GROUP BY DATE_TRUNC('day', created_at)
+			ORDER BY DATE_TRUNC('day', created_at) ASC
+		`
+	}
+
+	rows, err := h.db.Query(r.Context(), query)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch chart analytics: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type chartPoint struct {
+		Label         string  `json:"label"`
+		BookingsCount int     `json:"bookings_count"`
+		TotalRevenue  float64 `json:"total_revenue"`
+	}
+
+	var points []chartPoint
+	for rows.Next() {
+		var pt chartPoint
+		if err := rows.Scan(&pt.Label, &pt.BookingsCount, &pt.TotalRevenue); err == nil {
+			points = append(points, pt)
+		}
+	}
+	if points == nil {
+		points = []chartPoint{}
+	}
+	writeJSON(w, http.StatusOK, points)
+}
+
 // Refund & Reschedule Admin Handlers
 
 func (h *Handler) ListRefundRequests(w http.ResponseWriter, r *http.Request) {

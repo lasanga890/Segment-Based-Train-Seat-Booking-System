@@ -134,6 +134,7 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 			// Analytics
 			r.Get("/analytics/segments", h.GetSegmentAnalytics)
 			r.Get("/analytics/revenue", h.GetRevenueAnalytics)
+			r.Get("/analytics/chart", h.GetBookingChartAnalytics)
 		})
 	})
 }

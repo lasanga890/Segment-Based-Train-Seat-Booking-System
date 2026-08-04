@@ -471,6 +471,18 @@ export const getStationsPaginated = async (params: { all?: boolean, page: number
   return res.json()
 }
 
+export interface BookingChartPoint {
+  label: string
+  bookings_count: number
+  total_revenue: number
+}
+
+export const adminGetBookingChartAnalytics = async (groupby: 'day' | 'month' = 'day'): Promise<BookingChartPoint[]> => {
+  const res = await authFetch(`${BASE_URL}/admin/analytics/chart?groupby=${groupby}`)
+  if (!res.ok) throw new Error('Failed to fetch chart analytics')
+  return res.json()
+}
+
 // Authentication APIs
 
 export interface User {
