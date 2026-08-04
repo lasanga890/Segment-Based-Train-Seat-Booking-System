@@ -100,16 +100,10 @@
   }
 }
 
-@media screen {
-  .printable-pdf-document {
-    display: none !important;
-  }
-}
-
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 10mm;
+    size: portrait;
+    margin: 5mm;
   }
 
   body {
@@ -121,34 +115,31 @@
     print-color-adjust: exact !important;
   }
 
-  /* Hide web page elements during print */
+  /* Hide web page container elements */
   body * {
     visibility: hidden !important;
   }
 
-  /* Hide slim web thermal receipt on print */
-  .printable-thermal-receipt {
-    display: none !important;
-  }
-
-  /* Show only full-width single page A4 PDF ticket document */
-  .printable-pdf-document,
-  .printable-pdf-document * {
+  /* Show only the thermal receipt container */
+  .printable-thermal-receipt,
+  .printable-thermal-receipt * {
     visibility: visible !important;
-    display: block !important;
   }
 
-  .printable-pdf-document {
+  .printable-thermal-receipt {
     position: absolute !important;
     top: 0 !important;
-    left: 0 !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
     width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 12px !important;
     background: #ffffff !important;
-    color: #0f172a !important;
+    color: #000000 !important;
     box-shadow: none !important;
+    border: 1px dashed #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
