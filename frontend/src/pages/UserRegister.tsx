@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Mail, Lock, User as UserIcon, Phone, UserPlus, AlertCircle, Train } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { sendEmailNotification } from '../services/emailService'
 
 export default function UserRegister() {
   const [name, setName] = useState('')
@@ -22,6 +23,13 @@ export default function UserRegister() {
 
     try {
       await registerUser({ name, email, password, phone })
+      sendEmailNotification({
+        to_email: email.trim(),
+        to_name: name.trim(),
+        subject: 'Welcome to Sri Lanka Railways E-Booking System',
+        message: `Welcome ${name}! Your account has been created successfully. You can now reserve train seats, manage journeys, and request reschedules online.`,
+      }).catch((err) => console.error('Welcome email error:', err))
+
       navigate('/')
     } catch (err: any) {
       setError(err.message || 'Registration failed')

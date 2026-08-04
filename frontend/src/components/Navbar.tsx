@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import { getUserNotifications, markNotificationRead, type UserNotification } from '../services/api'
 import { motion, AnimatePresence } from 'framer-motion'
 
+import { sendEmailNotification } from '../services/emailService'
+
 export default function Navbar() {
   const { user, logoutUser } = useAuth()
   const location = useLocation()
@@ -14,7 +16,19 @@ export default function Navbar() {
   useEffect(() => {
     if (user) {
       getUserNotifications()
-        .then(setNotifications)
+        .then((notifs) => {
+          setNotifications(notifs)
+          notifs.forEach((n) => {
+            if (!n.is_read && n.title.toLowerCase().includes('waitlist')) {
+              sendEmailNotification({
+                to_email: user.email,
+                to_name: user.name,
+                subject: `Waitlist Auto-Promotion: Seat Confirmed!`,
+                message: `${n.message}. Log in to view your journey details.`,
+              }).catch(err => console.error('Waitlist email failed:', err))
+            }
+          })
+        })
         .catch(console.error)
     }
   }, [user, location.pathname])

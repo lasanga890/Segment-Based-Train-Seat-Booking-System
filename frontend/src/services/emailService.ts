@@ -1,8 +1,8 @@
 // EmailJS Service configuration
 export const EMAILJS_SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID || 'service_x1z7q8p'
-export const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || ''
-export const EMAILJS_RECEIPT_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_RECEIPT_TEMPLATE_ID || ''
-export const EMAILJS_STATUS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_STATUS_TEMPLATE_ID || ''
+export const EMAILJS_PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY || 'H8QxTF3eCPdzWhirQ'
+export const EMAILJS_RECEIPT_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_RECEIPT_TEMPLATE_ID || 'template_051ybek'
+export const EMAILJS_STATUS_TEMPLATE_ID = import.meta.env.VITE_EMAILJS_STATUS_TEMPLATE_ID || 'template_051ybek'
 
 export interface SendEmailOptions {
   to_email: string

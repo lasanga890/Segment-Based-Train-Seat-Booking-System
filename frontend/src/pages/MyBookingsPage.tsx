@@ -38,6 +38,7 @@ import {
 } from '../services/api'
 import Navbar from '../components/Navbar'
 import DigitalBoardingPassModal from '../components/DigitalBoardingPassModal'
+import { sendEmailNotification } from '../services/emailService'
 
 interface UserRefundItem {
   id: string
@@ -170,6 +171,17 @@ export default function MyBookingsPage() {
     try {
       const res = await cancelUserBooking(cancelModalBooking.id)
       setMsg({ type: 'success', text: res.message || 'Booking cancelled successfully. Seat segment released!' })
+
+      if (cancelModalBooking.passenger_email) {
+        sendEmailNotification({
+          to_email: cancelModalBooking.passenger_email,
+          to_name: cancelModalBooking.passenger_name,
+          subject: `Ticket Cancellation Confirmation #${cancelModalBooking.id.slice(0, 8).toUpperCase()}`,
+          message: `Your booking #${cancelModalBooking.id.slice(0, 8).toUpperCase()} for train ${cancelModalBooking.train_name || 'Express'} has been cancelled. Your seat segment has been released.`,
+          booking_id: cancelModalBooking.id.slice(0, 8).toUpperCase(),
+        }).catch(err => console.error('Cancellation email error:', err))
+      }
+
       setCancelModalBooking(null)
       loadData()
       setTimeout(() => setMsg(null), 4000)
