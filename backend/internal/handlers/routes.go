@@ -565,6 +565,8 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 		CreatedAt        string  `json:"created_at"`
 		TrainName        string  `json:"train_name"`
 		TrainNumber      string  `json:"train_number"`
+		CoachClass       string  `json:"coach_class"`
+		DepartureDate    string  `json:"departure_date"`
 		DepartureTime    string  `json:"departure_time"`
 	}
 
@@ -575,7 +577,9 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
 			c.coach_number, s.seat_number,
 			b.created_at::text,
-			COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(sch.departure_time::text, '')
+			COALESCE(t.name, ''), COALESCE(t.train_number, ''),
+			COALESCE(c.coach_class, 'SECOND'),
+			COALESCE(sch.departure_date::text, ''), COALESCE(sch.departure_time::text, '')
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
@@ -589,7 +593,8 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 		&fullBooking.StartStationName, &fullBooking.EndStationName,
 		&fullBooking.StartSeq, &fullBooking.EndSeq, &fullBooking.FareLKR, &fullBooking.Status,
 		&fullBooking.CoachNumber, &fullBooking.SeatNumber, &fullBooking.CreatedAt,
-		&fullBooking.TrainName, &fullBooking.TrainNumber, &fullBooking.DepartureTime,
+		&fullBooking.TrainName, &fullBooking.TrainNumber,
+		&fullBooking.CoachClass, &fullBooking.DepartureDate, &fullBooking.DepartureTime,
 	)
 	if err != nil {
 		writeJSON(w, http.StatusCreated, booking)
@@ -637,6 +642,8 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 		CreatedAt        string  `json:"created_at"`
 		TrainName        string  `json:"train_name"`
 		TrainNumber      string  `json:"train_number"`
+		CoachClass       string  `json:"coach_class"`
+		DepartureDate    string  `json:"departure_date"`
 		DepartureTime    string  `json:"departure_time"`
 	}
 
@@ -647,7 +654,9 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
 			c.coach_number, s.seat_number,
 			b.created_at::text,
-			COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(sch.departure_time::text, '')
+			COALESCE(t.name, ''), COALESCE(t.train_number, ''),
+			COALESCE(c.coach_class, 'SECOND'),
+			COALESCE(sch.departure_date::text, ''), COALESCE(sch.departure_time::text, '')
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
@@ -661,7 +670,8 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 		&booking.StartStationName, &booking.EndStationName,
 		&booking.StartSeq, &booking.EndSeq, &booking.FareLKR, &booking.Status,
 		&booking.CoachNumber, &booking.SeatNumber, &booking.CreatedAt,
-		&booking.TrainName, &booking.TrainNumber, &booking.DepartureTime,
+		&booking.TrainName, &booking.TrainNumber,
+		&booking.CoachClass, &booking.DepartureDate, &booking.DepartureTime,
 	)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "Booking not found")

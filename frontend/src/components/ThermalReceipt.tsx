@@ -9,10 +9,23 @@ interface ThermalReceiptProps {
   onClose?: () => void
 }
 
+function formatTravelDate(dateStr?: string): string {
+  if (!dateStr) return '-'
+  const cleanDate = dateStr.split('T')[0].split(' ')[0]
+  const parts = cleanDate.split('-')
+  if (parts.length === 3) {
+    const [year, month, day] = parts
+    const shortYear = year.slice(-2)
+    return `${day}/${month}/${shortYear}`
+  }
+  return dateStr
+}
+
 export default function ThermalReceipt({ booking, allBookings, onClose }: ThermalReceiptProps) {
   const bookingsList = allBookings && allBookings.length > 0 ? allBookings : [booking]
   const totalFare = bookingsList.reduce((sum, b) => sum + (b.fare_lkr || 0), 0)
-  const bookingDate = booking.departure_date || booking.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]
+  const rawDate = booking.departure_date || booking.created_at?.split('T')[0] || new Date().toISOString().split('T')[0]
+  const bookingDate = formatTravelDate(rawDate)
   const bookingTime = booking.departure_time || 'SCHEDULED'
   const refId = booking.id ? booking.id.slice(0, 8).toUpperCase() : 'REC-1001'
 
@@ -53,7 +66,7 @@ export default function ThermalReceipt({ booking, allBookings, onClose }: Therma
           </div>
           <div className="flex justify-between">
             <span className="text-slate-600">CLASS      :</span>
-            <span className="font-bold">{booking.coach_class || 'SECOND'} CLASS</span>
+            <span className="font-bold">{booking.coach_class || 'THIRD'} CLASS</span>
           </div>
         </div>
 

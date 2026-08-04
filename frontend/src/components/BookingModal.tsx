@@ -106,9 +106,13 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
         })
       )
       const bookings = await Promise.all(bookingPromises)
+      const enrichedBookings = bookings.map(b => ({
+        ...b,
+        coach_class: b.coach_class || coachClass,
+      }))
       // Navigate to confirmation page with state
-      navigate(`/booking/${bookings[0].id}`, {
-        state: { allBookings: bookings }
+      navigate(`/booking/${enrichedBookings[0].id}`, {
+        state: { allBookings: enrichedBookings }
       })
     } catch (err: any) {
       setError(err.message || 'Booking failed. Please try again.')
