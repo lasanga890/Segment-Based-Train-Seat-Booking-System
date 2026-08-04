@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,11 +15,22 @@ import (
 	"github.com/lasanga890/segment-train-booking/internal/services"
 )
 
-// ─── Schedules ────────────────────────────────────────────────────────────────
+// autoDeactivateExpiredSchedules deactivates schedules departing within 1 hour (or already departed)
+func (h *Handler) autoDeactivateExpiredSchedules(ctx context.Context) {
+	_, _ = h.db.Exec(ctx, `
+		UPDATE schedules
+		SET is_active = false,
+		    cancel_reason = COALESCE(cancel_reason, 'Departure within 1 hour')
+		WHERE is_active = true
+		  AND (departure_date + departure_time::time) <= (NOW() + INTERVAL '1 hour')
+	`)
+}
 
 // ListSchedules returns train schedules filtered by date and direction.
 // GET /api/v1/schedules?date=YYYY-MM-DD&direction=UP
 func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
+
 	dateStr := r.URL.Query().Get("date")
 	direction := r.URL.Query().Get("direction")
 
@@ -33,7 +45,7 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 		FROM schedules s
 		JOIN trains t ON t.id = s.train_id
 		WHERE s.departure_date = $1 AND t.direction = $2 AND s.is_active = true
-		  AND (s.departure_date > CURRENT_DATE OR (s.departure_date = CURRENT_DATE AND s.departure_time > CURRENT_TIME))
+		  AND (s.departure_date + s.departure_time::time) > (NOW() + INTERVAL '1 hour')
 		ORDER BY s.departure_time ASC
 	`, dateStr, direction)
 	if err != nil {
@@ -57,7 +69,7 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, schedules)
 }
 
-// ─── Stations ─────────────────────────────────────────────────────────────────
+// Stations
 
 // ListStations returns all stations in sequence order.
 // GET /api/v1/stations
@@ -179,7 +191,7 @@ func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, stations)
 }
 
-// ─── Coaches ──────────────────────────────────────────────────────────────────
+// Coaches
 
 // ListCoaches returns all coaches with type and seat count.
 // GET /api/v1/coaches
@@ -252,6 +264,7 @@ func (h *Handler) ListScheduleCoaches(w http.ResponseWriter, r *http.Request) {
 			) AS booked_seats
 		FROM coaches c
 		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id AND sch.is_active = true
+		  AND (sch.departure_date + sch.departure_time::time) > (NOW() + INTERVAL '1 hour')
 		WHERE c.coach_type = 'RESERVED'
 	`
 
@@ -297,11 +310,13 @@ func (h *Handler) ListScheduleCoaches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, coaches)
 }
 
-// ─── Seat Availability ────────────────────────────────────────────────────────
+// Seat Availability
 
 // GetSeatAvailability returns all RESERVED seats with status for the requested leg.
 // GET /api/v1/seats/availability?from=0&to=9
 func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
+
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	scheduleIDStr := r.URL.Query().Get("schedule_id")
@@ -341,11 +356,12 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, seats)
 }
 
-// ─── Bookings ────────────────────────────────────────────────────────────────
+// Bookings
 
 // HoldSeat places a temporary 5-minute hold on a seat for a leg.
 // POST /api/v1/bookings/hold
 func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
 	var req struct {
 		ScheduleID string `json:"schedule_id"`
 		SeatID     string `json:"seat_id"`
@@ -394,6 +410,7 @@ func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
 // HoldManySeats places holds on multiple seats in a single request.
 // POST /api/v1/bookings/hold-many
 func (h *Handler) HoldManySeats(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
 	var req struct {
 		ScheduleID string   `json:"schedule_id"`
 		SeatIDs    []string `json:"seat_ids"`

@@ -1,6 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // Typed API client — all backend communication goes through this module.
-// ─────────────────────────────────────────────────────────────────────────────
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
   ? `${import.meta.env.VITE_API_BASE_URL}/api/v1`
@@ -35,7 +33,7 @@ export const authFetch = async (url: string, options: RequestInit = {}) => {
   return res
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// Types
 
 export interface Station {
   id: string
@@ -146,14 +144,14 @@ export interface AdminMetrics {
   revenue_by_coach_type: Array<{ coach_type: string; revenue: number }>
 }
 
-// ─── Health ──────────────────────────────────────────────────────────────────
+// Health
 
 export const healthCheck = async () => {
   const res = await fetch(`${BASE_URL}/health`)
   return res.json()
 }
 
-// ─── Stations ────────────────────────────────────────────────────────────────
+// Stations
 
 export const getStations = async (all = false): Promise<Station[]> => {
   const res = await fetch(`${BASE_URL}/stations${all ? '?all=true' : ''}`)
@@ -161,7 +159,7 @@ export const getStations = async (all = false): Promise<Station[]> => {
   return res.json()
 }
 
-// ─── Schedules ───────────────────────────────────────────────────────────────
+// Schedules
 
 export const getSchedules = async (date: string, direction: 'UP' | 'DOWN'): Promise<Schedule[]> => {
   const res = await fetch(`${BASE_URL}/schedules?date=${date}&direction=${direction}`)
@@ -169,7 +167,7 @@ export const getSchedules = async (date: string, direction: 'UP' | 'DOWN'): Prom
   return res.json()
 }
 
-// ─── Coaches ─────────────────────────────────────────────────────────────────
+// Coaches
 
 export interface ScheduleCoach {
   id: string
@@ -194,7 +192,7 @@ export const getScheduleCoaches = async (scheduleId: string, coachClass?: string
   return res.json()
 }
 
-// ─── Seat Availability ────────────────────────────────────────────────────────
+// Seat Availability
 
 export const getSeatAvailability = async (
   scheduleId: string,
@@ -207,7 +205,7 @@ export const getSeatAvailability = async (
   return res.json()
 }
 
-// ─── Bookings ─────────────────────────────────────────────────────────────────
+// Bookings
 
 export const holdSeat = async (req: HoldRequest): Promise<{ hold_id: string; expires_at: string; fare: FareBreakdown }> => {
   const res = await fetch(`${BASE_URL}/bookings/hold`, {
@@ -258,7 +256,7 @@ export const getBooking = async (id: string): Promise<Booking> => {
   return res.json()
 }
 
-// ─── Admin ────────────────────────────────────────────────────────────────────
+// Admin
 
 export const getAdminMetrics = async (): Promise<AdminMetrics> => {
   const res = await authFetch(`${BASE_URL}/admin/metrics`)
@@ -341,7 +339,7 @@ export const adminListTrainCoaches = async (trainId: string): Promise<AdminCoach
   return res.json()
 }
 
-// ─── Requests: Reschedule & Refund ───────────────────────────────────────────
+// Requests: Reschedule & Refund
 
 export const createRescheduleRequest = async (bookingId: string, req: { new_schedule_id?: string; new_start_station_id?: string; new_end_station_id?: string; new_seat_id?: string }) => {
   const res = await authFetch(`${BASE_URL}/user/bookings/${bookingId}/reschedule`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req) })
@@ -473,7 +471,7 @@ export const getStationsPaginated = async (params: { all?: boolean, page: number
   return res.json()
 }
 
-// ─── Authentication APIs ──────────────────────────────────────────────────────
+// Authentication APIs
 
 export interface User {
   id: string
@@ -524,7 +522,7 @@ export const getUserMeApi = async (): Promise<User> => {
   return res.json()
 }
 
-// ─── Passenger Profile & Presets ──────────────────────────────────────────────
+// Passenger Profile & Presets
 
 export interface UserProfile extends User {
   phone?: string

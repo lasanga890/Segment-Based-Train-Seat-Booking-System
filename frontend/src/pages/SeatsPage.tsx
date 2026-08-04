@@ -19,13 +19,13 @@ export default function SeatsPage() {
   const fromSeq = fromParam !== null && fromParam !== '' ? parseInt(fromParam) : -1
   const toSeq   = toParam !== null && toParam !== '' ? parseInt(toParam) : -1
 
-  // ─── Coach selection state ────────────────────────────────────────────────
+  // Coach selection state
   const [showCoachModal, setShowCoachModal] = useState(true)
   const [coaches, setCoaches] = useState<ScheduleCoach[]>([])
   const [coachesLoading, setCoachesLoading] = useState(true)
   const [selectedCoach, setSelectedCoach] = useState<ScheduleCoach | null>(null)
 
-  // ─── Seat map state ───────────────────────────────────────────────────────
+  // Seat map state
   const [seats, setSeats]             = useState<SeatAvailability[]>([])
   const [stations, setStations]       = useState<Station[]>([])
   const [selectedSeats, setSelectedSeats] = useState<SeatAvailability[]>([])
@@ -165,7 +165,7 @@ export default function SeatsPage() {
 
   return (
     <div className="min-h-screen bg-slate-950">
-      {/* ── Top Bar ──────────────────────────────────────────────────────── */}
+      {/* Top Bar */}
       <div className="border-b border-white/5 bg-slate-900/50 backdrop-blur sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -214,7 +214,7 @@ export default function SeatsPage() {
         </div>
       </div>
 
-      {/* ── Coach Selection Modal ─────────────────────────────────────────────── */}
+      {/* Coach Selection Modal */}
       <AnimatePresence>
         {showCoachModal && (
           <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4">
@@ -367,7 +367,7 @@ export default function SeatsPage() {
       </AnimatePresence>
 
       <div className="max-w-6xl mx-auto px-4 py-8 pb-36">
-        {/* ── Info Banner ─────────────────────────────────────────────── */}
+        {/* Info Banner */}
         {!showCoachModal && selectedCoach && (
           <div className="mb-6 flex items-start gap-3 p-4 bg-brand-500/10 border border-brand-500/20 rounded-xl">
             <Info size={16} className="text-brand-400 mt-0.5 shrink-0" />
@@ -379,13 +379,13 @@ export default function SeatsPage() {
           </div>
         )}
 
-        {/* ── Loading ─────────────────────────────────────────────────── */}
+        {/* Loading */}
         {loading ? (
           <div className="flex items-center justify-center py-32">
             <div className="w-10 h-10 border-4 border-brand-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : !showCoachModal && (
-          /* ── Coach Map ────────────────────────────────────────────── */
+          /* Coach Map */
           <div className="space-y-6">
             {Object.entries(seatsByCoach).map(([coachNum, coachSeats]) => (
               <motion.div
@@ -433,7 +433,7 @@ export default function SeatsPage() {
         )}
       </div>
 
-      {/* ── Floating Selection Bar ────────────────────────────────────────── */}
+      {/* Floating Selection Bar */}
       <AnimatePresence>
         {selectedSeats.length > 0 && !holdResults && (
           <motion.div
@@ -484,7 +484,7 @@ export default function SeatsPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Booking Modal ────────────────────────────────────────────────── */}
+      {/* Booking Modal */}
       <AnimatePresence>
         {holdResults && holdResults.length > 0 && (
           <BookingModal

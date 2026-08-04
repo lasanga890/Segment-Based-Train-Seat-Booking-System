@@ -37,7 +37,7 @@ export default function App() {
       <AuthProvider>
         <Suspense fallback={<LoadingSpinner />}>
           <Routes>
-            {/* ── Passenger Routes ───────────────────────────────────────── */}
+            {/* Passenger Routes */}
             <Route path="/"            element={<HomePage />} />
             <Route path="/seats"       element={<SeatsPage />} />
             <Route path="/booking/:id" element={<BookingPage />} />
@@ -46,7 +46,7 @@ export default function App() {
             <Route path="/profile"     element={<ProfilePage />} />
             <Route path="/my-bookings" element={<MyBookingsPage />} />
 
-            {/* ── Admin Auth & Admin Routes ────────────────────────────── */}
+            {/* Admin Auth & Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Navigate to="metrics" replace />} />
@@ -59,7 +59,7 @@ export default function App() {
               <Route path="requests"  element={<AdminRequests />} />
             </Route>
 
-            {/* ── 404 ────────────────────────────────────────────────────── */}
+            {/* 404 */}
             <Route path="*" element={
               <div className="min-h-screen flex items-center justify-center">
                 <div className="glass-card p-12 text-center">

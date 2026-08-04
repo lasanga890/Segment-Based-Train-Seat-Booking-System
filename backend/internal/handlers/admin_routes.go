@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// ─── Station CRUD ─────────────────────────────────────────────────────────────
+// Station CRUD
 
 func (h *Handler) CreateStation(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -81,7 +81,7 @@ func (h *Handler) ToggleStationStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
-// ─── Train CRUD ───────────────────────────────────────────────────────────────
+// Train CRUD
 
 func (h *Handler) ListTrains(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
@@ -167,7 +167,7 @@ func (h *Handler) DeleteTrain(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// ─── Coach CRUD ───────────────────────────────────────────────────────────────
+// Coach CRUD
 
 func (h *Handler) ListTrainCoaches(w http.ResponseWriter, r *http.Request) {
 	trainID := chi.URLParam(r, "trainId")
@@ -296,11 +296,13 @@ func (h *Handler) RemoveCoach(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
-// ─── Schedule CRUD ────────────────────────────────────────────────────────────
+// Schedule CRUD
 
 // ListAdminSchedules returns scheduled services, optionally narrowed to a date
 // range and/or direction. A schedule is one train departure on one calendar date.
 func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
+
 	dateFrom := r.URL.Query().Get("date_from")
 	dateTo := r.URL.Query().Get("date_to")
 	direction := r.URL.Query().Get("direction")
@@ -315,7 +317,7 @@ func (h *Handler) ListAdminSchedules(w http.ResponseWriter, r *http.Request) {
 		args = append(args, dateFrom)
 		conditions = append(conditions, fmt.Sprintf("s.departure_date >= $%d", len(args)))
 	} else {
-		conditions = append(conditions, "(s.departure_date > CURRENT_DATE OR (s.departure_date = CURRENT_DATE AND s.departure_time >= CURRENT_TIME))")
+		conditions = append(conditions, "(s.departure_date + s.departure_time::time) > (NOW() + INTERVAL '1 hour')")
 	}
 	if dateTo != "" {
 		if _, err := parseScheduleDate(dateTo); err != nil {
@@ -581,7 +583,7 @@ func (h *Handler) ToggleScheduleStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
 
-// ─── Booking Operations ───────────────────────────────────────────────────────
+// Booking Operations
 
 func (h *Handler) CancelBooking(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
@@ -636,7 +638,7 @@ func (h *Handler) GetSeatOccupancy(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-// ─── Analytics ────────────────────────────────────────────────────────────────
+// Analytics
 
 func (h *Handler) GetSegmentAnalytics(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
@@ -733,7 +735,7 @@ func (h *Handler) GetRevenueAnalytics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
-// ─── Refund & Reschedule Admin Handlers ──────────────────────────────────────
+// Refund & Reschedule Admin Handlers
 
 func (h *Handler) ListRefundRequests(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `

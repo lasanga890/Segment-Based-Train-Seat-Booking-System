@@ -74,7 +74,7 @@ export default function BookingPage() {
         >
           <h1 className="text-2xl font-black text-white">Booking Confirmed!</h1>
           <p className="text-slate-400 text-xs mt-1">
-            Official Thermal Printer Ticket Receipt Generated 🚂
+            Official Thermal Printer Ticket Receipt Generated
           </p>
         </motion.div>
 

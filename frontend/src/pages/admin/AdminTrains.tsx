@@ -191,7 +191,7 @@ export default function AdminTrains() {
         </div>
       )}
 
-      {/* ── Top-Level Train Modal Overlay ────────────────────────────────────── */}
+      {/* Top-Level Train Modal Overlay */}
       <AnimatePresence>
         {trainModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
@@ -226,7 +226,7 @@ export default function AdminTrains() {
         )}
       </AnimatePresence>
 
-      {/* ── Top-Level Coach Modal Overlay (Global Backdrop Blur) ─────────────── */}
+      {/* Top-Level Coach Modal Overlay */}
       <AnimatePresence>
         {coachModal && activeTrainForCoach && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">

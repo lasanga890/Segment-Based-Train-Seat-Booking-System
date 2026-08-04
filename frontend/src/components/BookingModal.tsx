@@ -136,7 +136,7 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl overflow-hidden max-h-[90vh] flex flex-col"
       >
-        {/* ── Header ─────────────────────────────────────────────────── */}
+        {/* Header */}
         <div className="p-5 border-b border-white/5 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-brand-600 rounded-lg flex items-center justify-center">
@@ -159,7 +159,7 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
         </div>
 
         <div className="overflow-y-auto flex-1">
-          {/* ── Route & Seats Summary ───────────────────────────────────────── */}
+          {/* Route & Seats Summary */}
           <div className="p-5 bg-slate-800/50">
             <div className="flex items-center gap-2 text-sm mb-4">
               <span className="text-slate-300 font-medium">{fromStation.name}</span>
@@ -199,7 +199,7 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
             </div>
           </div>
 
-          {/* ── Guest or Logged In Passenger Form ──────────────────────── */}
+          {/* Guest or Logged In Passenger Form */}
           <div className="p-5 space-y-4">
             {user ? (
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-xs text-emerald-400 flex items-center justify-between">
@@ -344,7 +344,7 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
           </div>
         </div>
 
-        {/* ── Action Buttons ───────────────────────────────────────────── */}
+        {/* Action Buttons */}
         <div className="p-5 border-t border-white/5 flex gap-3 flex-shrink-0">
           <button
             type="button"

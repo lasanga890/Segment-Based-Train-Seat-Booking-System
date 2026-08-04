@@ -198,7 +198,7 @@ export default function ProfilePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* ── Section 1: Personal Info Card ──────────────────────── */}
+            {/* Section 1: Personal Info Card */}
             <div className="lg:col-span-1 glass-card p-6 border border-white/10 space-y-6 relative overflow-hidden">
               <div className="flex items-center justify-between border-b border-white/5 pb-4">
                 <div className="flex items-center gap-2.5">
@@ -259,7 +259,7 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ── Section 2: Favorite Frequent Routes ─────────────── */}
+            {/* Section 2: Favorite Frequent Routes */}
             <div className="lg:col-span-2 space-y-6">
               <div className="glass-card p-6 border border-white/10 space-y-4">
                 <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -406,7 +406,7 @@ export default function ProfilePage() {
           )}
         </AnimatePresence>
 
-        {/* ── Favorite Route Modal ───────────────────────────────────── */}
+        {/* Favorite Route Modal */}
         <AnimatePresence>
           {showRouteModal && (
             <div

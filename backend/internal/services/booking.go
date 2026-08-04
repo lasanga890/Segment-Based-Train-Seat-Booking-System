@@ -285,6 +285,7 @@ func (s *BookingService) validateActiveScheduleSeat(ctx context.Context, schedul
 			JOIN seats s ON s.id = $2
 			JOIN coaches c ON c.id = s.coach_id AND c.train_id = sch.train_id
 			WHERE sch.id = $1 AND sch.is_active = true
+			  AND (sch.departure_date + sch.departure_time::time) > (NOW() + INTERVAL '1 hour')
 		)
 	`, scheduleID, seatID).Scan(&valid)
 	if err != nil {

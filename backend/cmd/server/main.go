@@ -37,18 +37,18 @@ func main() {
 		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
 	}
 	defer db.Close()
-	log.Println("✅ PostgreSQL connected")
+	log.Println("PostgreSQL connected")
 
 	// Run database migrations
 	if err := database.RunMigrations(cfg.DatabaseURL); err != nil {
 		log.Fatalf("Failed to run migrations: %v", err)
 	}
-	log.Println("✅ Database migrations applied")
+	log.Println("Database migrations applied")
 
 	// Connect to Redis
 	rdb := redisclient.Connect(cfg)
 	defer rdb.Close()
-	log.Println("✅ Redis connected")
+	log.Println("Redis connected")
 
 	// Build router
 	r := chi.NewRouter()
@@ -77,6 +77,33 @@ func main() {
 	h := handlers.New(db, rdb, cfg)
 	h.RegisterRoutes(r)
 
+	// Run initial cleanup of schedules departing within 1 hour
+	_, _ = db.Exec(context.Background(), `
+		UPDATE schedules
+		SET is_active = false,
+		    cancel_reason = COALESCE(cancel_reason, 'Departure within 1 hour')
+		WHERE is_active = true
+		  AND (departure_date + departure_time::time) <= (NOW() + INTERVAL '1 hour')
+	`)
+
+	// Background worker: auto-deactivate schedules 1 hour before departure every 1 minute
+	go func() {
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			_, err := db.Exec(context.Background(), `
+				UPDATE schedules
+				SET is_active = false,
+				    cancel_reason = COALESCE(cancel_reason, 'Departure within 1 hour')
+				WHERE is_active = true
+				  AND (departure_date + departure_time::time) <= (NOW() + INTERVAL '1 hour')
+			`)
+			if err != nil {
+				log.Printf("Error auto-deactivating expired schedules: %v", err)
+			}
+		}
+	}()
+
 	// Start HTTP server with graceful shutdown
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.ServerPort),
@@ -88,7 +115,7 @@ func main() {
 
 	// Run server in goroutine
 	go func() {
-		log.Printf("🚂 Train Booking API running on port %s", cfg.ServerPort)
+		log.Printf("Train Booking API running on port %s", cfg.ServerPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}

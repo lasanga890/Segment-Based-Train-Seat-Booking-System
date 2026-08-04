@@ -95,7 +95,7 @@ export default function HomePage() {
       <div className="relative z-10 min-h-screen flex flex-col">
         <Navbar />
 
-        {/* ── Hero ───────────────────────────────────────────────────── */}
+        {/* Hero */}
         <main className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-2xl">
             <motion.div
@@ -120,7 +120,7 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            {/* ── Favorite Routes Quick Select ─────────────────────── */}
+            {/* Favorite Routes Quick Select */}
             {user && favoriteRoutes.length > 0 && (
               <div className="mb-4 flex items-center justify-center gap-2 flex-wrap text-xs">
                 <span className="text-slate-400 font-semibold flex items-center gap-1">
@@ -142,7 +142,7 @@ export default function HomePage() {
               </div>
             )}
 
-            {/* ── Search Form ──────────────────────────────────────────── */}
+            {/* Search Form */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

@@ -21,7 +21,7 @@ export default function AdminLayout() {
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-slate-950 flex">
-      {/* ── Fixed Side Panel ─────────────────────────────────────────── */}
+      {/* Fixed Side Panel */}
       <aside className="w-60 h-screen sticky top-0 border-r border-white/10 bg-slate-900/80 backdrop-blur-md p-5 flex flex-col justify-between shrink-0 z-30 select-none">
         <div className="space-y-6">
           {/* Logo Header */}
@@ -148,7 +148,7 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      {/* ── Independent Scrollable Content Area ───────────────────────────── */}
+      {/* Independent Scrollable Content Area */}
       <main className="flex-1 h-screen overflow-y-auto p-6 lg:p-8 bg-slate-950">
         <Outlet />
       </main>
