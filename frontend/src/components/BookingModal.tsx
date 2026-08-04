@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { X, Clock, CheckCircle, AlertCircle, Train, Armchair, UserCheck, LogIn, UserPlus, User } from 'lucide-react'
 import { confirmBooking, releaseHold, getFrequentPassengers, type SeatAvailability, type Station, type MultiHoldItem, type FrequentPassenger } from '../services/api'
+import { sendEmailNotification } from '../services/emailService'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -110,6 +111,23 @@ export default function BookingModal({ seats, holds, fromStation, toStation, onC
         ...b,
         coach_class: b.coach_class || coachClass,
       }))
+
+      // Send Email Receipt if email is provided
+      if (email.trim()) {
+        sendEmailNotification({
+          to_email: email.trim(),
+          to_name: name.trim(),
+          subject: `Train Ticket Booking Receipt #${enrichedBookings[0].id.slice(0, 8).toUpperCase()}`,
+          message: `Thank you for booking with Sri Lanka Railways. Your booking is confirmed.`,
+          booking_id: enrichedBookings[0].id.slice(0, 8).toUpperCase(),
+          train_name: `${enrichedBookings[0].train_name || 'Express'} (#${enrichedBookings[0].train_number || '101'})`,
+          route: `${fromStation.name} -> ${toStation.name}`,
+          travel_date: enrichedBookings[0].departure_date || 'Scheduled',
+          seats: enrichedBookings.map(b => `Coach ${b.coach_number} / Seat #${b.seat_number}`).join(', '),
+          total_fare: `LKR ${enrichedBookings.reduce((sum, b) => sum + (b.fare_lkr || 0), 0).toFixed(2)}`,
+        }).catch(err => console.error('Email send failed:', err))
+      }
+
       // Navigate to confirmation page with state
       navigate(`/booking/${enrichedBookings[0].id}`, {
         state: { allBookings: enrichedBookings }

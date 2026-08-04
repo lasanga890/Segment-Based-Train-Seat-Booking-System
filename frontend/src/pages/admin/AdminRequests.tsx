@@ -19,6 +19,7 @@ import {
   adminApproveRescheduleRequest,
   adminRejectRescheduleRequest,
 } from '../../services/api'
+import { sendEmailNotification, EMAILJS_STATUS_TEMPLATE_ID } from '../../services/emailService'
 
 interface RefundReq {
   id: string
@@ -30,6 +31,7 @@ interface RefundReq {
   admin_note?: string
   decided_at?: string
   passenger_name: string
+  passenger_email?: string
   fare_lkr: number
   departure_date?: string
   departure_time?: string
@@ -48,6 +50,7 @@ interface RescheduleReq {
   admin_note?: string
   decided_at?: string
   passenger_name: string
+  passenger_email?: string
   departure_date?: string
   departure_time?: string
   new_start_name?: string
@@ -124,6 +127,10 @@ export default function AdminRequests() {
     if (!actionModal) return
     setSubmitting(true)
     try {
+      const targetReq = actionModal.type === 'RESCHEDULE'
+        ? rescheduleList.find(r => r.id === actionModal.id)
+        : refundList.find(r => r.id === actionModal.id)
+
       if (actionModal.type === 'RESCHEDULE') {
         if (actionModal.action === 'APPROVE') {
           await adminApproveRescheduleRequest(actionModal.id, adminNote)
@@ -141,6 +148,19 @@ export default function AdminRequests() {
           setToast({ msg: 'Refund request rejected.', type: 'success' })
         }
       }
+
+      // Send EmailJS notification to passenger if email is available
+      if (targetReq && targetReq.passenger_email) {
+        sendEmailNotification({
+          to_email: targetReq.passenger_email,
+          to_name: actionModal.passenger,
+          subject: `Update on your ${actionModal.type.toLowerCase()} request for booking #${targetReq.booking_id.slice(0, 8).toUpperCase()}`,
+          message: `Your ${actionModal.type.toLowerCase()} request for booking #${targetReq.booking_id.slice(0, 8).toUpperCase()} has been ${actionModal.action === 'APPROVE' ? 'APPROVED' : 'REJECTED'}.${adminNote ? ` Note: ${adminNote}` : ''}`,
+          booking_id: targetReq.booking_id.slice(0, 8).toUpperCase(),
+          template_id: EMAILJS_STATUS_TEMPLATE_ID,
+        }).catch(err => console.error('Status email failed:', err))
+      }
+
       setActionModal(null)
       setAdminNote('')
       loadRequests()

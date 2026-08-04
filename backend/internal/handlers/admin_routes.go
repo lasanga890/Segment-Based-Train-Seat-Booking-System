@@ -797,7 +797,7 @@ func (h *Handler) GetBookingChartAnalytics(w http.ResponseWriter, r *http.Reques
 func (h *Handler) ListRefundRequests(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
 		SELECT rr.id::text, rr.booking_id::text, rr.user_id::text, rr.requested_at::text, rr.refundable_amount, rr.status, rr.admin_note, rr.decided_at::text,
-			b.passenger_name, b.fare_lkr, sch.departure_date::text, sch.departure_time::text
+			b.passenger_name, COALESCE(b.passenger_email, ''), b.fare_lkr, sch.departure_date::text, sch.departure_time::text
 		FROM refund_requests rr
 		JOIN bookings b ON b.id = rr.booking_id
 		LEFT JOIN schedules sch ON sch.id = b.schedule_id
@@ -819,6 +819,7 @@ func (h *Handler) ListRefundRequests(w http.ResponseWriter, r *http.Request) {
 		AdminNote        *string `json:"admin_note"`
 		DecidedAt        *string `json:"decided_at"`
 		PassengerName    string  `json:"passenger_name"`
+		PassengerEmail   string  `json:"passenger_email"`
 		FareLKR          float64 `json:"fare_lkr"`
 		DepartureDate    *string `json:"departure_date"`
 		DepartureTime    *string `json:"departure_time"`
@@ -828,7 +829,7 @@ func (h *Handler) ListRefundRequests(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var rrow row
 		var decAt, depDate, depTime interface{}
-		if err := rows.Scan(&rrow.ID, &rrow.BookingID, &rrow.UserID, &rrow.RequestedAt, &rrow.RefundableAmount, &rrow.Status, &rrow.AdminNote, &decAt, &rrow.PassengerName, &rrow.FareLKR, &depDate, &depTime); err != nil {
+		if err := rows.Scan(&rrow.ID, &rrow.BookingID, &rrow.UserID, &rrow.RequestedAt, &rrow.RefundableAmount, &rrow.Status, &rrow.AdminNote, &decAt, &rrow.PassengerName, &rrow.PassengerEmail, &rrow.FareLKR, &depDate, &depTime); err != nil {
 			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
@@ -910,7 +911,7 @@ func (h *Handler) RejectRefundRequest(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListRescheduleRequests(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.db.Query(r.Context(), `
 		SELECT rr.id::text, rr.booking_id::text, rr.user_id::text, rr.requested_at::text, rr.new_schedule_id::text, rr.new_start_station_id::text, rr.new_end_station_id::text, rr.new_seat_id::text, rr.status, rr.admin_note, rr.decided_at::text,
-			b.passenger_name, sch.departure_date::text, sch.departure_time::text,
+			b.passenger_name, COALESCE(b.passenger_email, ''), sch.departure_date::text, sch.departure_time::text,
 			COALESCE(ns.name, '') as new_start_name, COALESCE(ne.name, '') as new_end_name,
 			COALESCE(nsch.departure_date::text, '') as new_departure_date, COALESCE(nsch.departure_time::text, '') as new_departure_time
 		FROM reschedule_requests rr
@@ -940,6 +941,7 @@ func (h *Handler) ListRescheduleRequests(w http.ResponseWriter, r *http.Request)
 		AdminNote         *string `json:"admin_note"`
 		DecidedAt         *string `json:"decided_at"`
 		PassengerName     string  `json:"passenger_name"`
+		PassengerEmail    string  `json:"passenger_email"`
 		DepartureDate     *string `json:"departure_date"`
 		DepartureTime     *string `json:"departure_time"`
 		NewStartName      string  `json:"new_start_name"`
@@ -956,7 +958,7 @@ func (h *Handler) ListRescheduleRequests(w http.ResponseWriter, r *http.Request)
 			&it.ID, &it.BookingID, &it.UserID, &it.RequestedAt,
 			&it.NewScheduleID, &it.NewStartStationID, &it.NewEndStationID, &it.NewSeatID,
 			&it.Status, &it.AdminNote, &decAt,
-			&it.PassengerName, &depDate, &depTime,
+			&it.PassengerName, &it.PassengerEmail, &depDate, &depTime,
 			&it.NewStartName, &it.NewEndName, &it.NewDepartureDate, &it.NewDepartureTime,
 		); err != nil {
 			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
