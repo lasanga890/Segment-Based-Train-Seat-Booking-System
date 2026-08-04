@@ -39,21 +39,102 @@ func (h *Handler) RegisterRoutes(r *chi.Mux) {
 
 		// Schedules
 		r.Get("/schedules", h.ListSchedules)
+		r.Get("/trains", h.ListTrains)
+		r.Get("/schedules/{scheduleId}/coaches", h.ListScheduleCoaches)
 
 		// Seat availability for a given leg
 		r.Get("/seats/availability", h.GetSeatAvailability)
 
-		// Bookings
-		r.Post("/bookings/hold", h.HoldSeat)
-		r.Post("/bookings/confirm", h.ConfirmBooking)
-		r.Delete("/bookings/hold/{holdId}", h.ReleaseHold)
-		r.Get("/bookings/{id}", h.GetBooking)
+		// Auth routes
+		r.Post("/auth/admin/login", h.AdminLogin)
+		r.Post("/auth/user/register", h.UserRegister)
+		r.Post("/auth/user/login", h.UserLogin)
+		r.With(h.UserAuthMiddleware).Get("/auth/user/me", h.GetUserMe)
 
-		// Admin routes (JWT protected — middleware added in Phase 3)
+		// Bookings (Both guests & authenticated users can hold and confirm seats)
+		r.With(h.UserAuthMiddleware).Post("/bookings/hold", h.HoldSeat)
+		r.With(h.UserAuthMiddleware).Post("/bookings/hold-many", h.HoldManySeats)
+		r.With(h.UserAuthMiddleware).Post("/bookings/confirm", h.ConfirmBooking)
+		r.Delete("/bookings/hold/{holdId}", h.ReleaseHold)
+
+		// Restrict viewing booking details to logged-in users only
+		r.With(h.RequireUserAuthMiddleware).Get("/bookings/{id}", h.GetBooking)
+
+		// Passenger Profile & Dashboard Routes (Require logged-in user authentication)
+		r.Route("/user", func(r chi.Router) {
+			r.Use(h.RequireUserAuthMiddleware)
+			r.Get("/profile", h.GetUserProfile)
+			r.Put("/profile", h.UpdateUserProfile)
+
+			r.Get("/frequent-passengers", h.ListFrequentPassengers)
+			r.Post("/frequent-passengers", h.AddFrequentPassenger)
+			r.Delete("/frequent-passengers/{id}", h.DeleteFrequentPassenger)
+
+			r.Get("/favorite-routes", h.ListFavoriteRoutes)
+			r.Post("/favorite-routes", h.AddFavoriteRoute)
+			r.Delete("/favorite-routes/{id}", h.DeleteFavoriteRoute)
+
+			r.Get("/bookings", h.GetUserBookings)
+			r.Patch("/bookings/{id}/cancel", h.CancelUserBooking)
+			r.Post("/bookings/{id}/reschedule", h.CreateRescheduleRequest)
+
+			r.Get("/refund-requests", h.GetUserRefundRequests)
+			r.Get("/reschedule-requests", h.GetUserRescheduleRequests)
+
+			r.Get("/waitlists", h.GetUserWaitlists)
+
+			r.Get("/notifications", h.GetUserNotifications)
+			r.Patch("/notifications/{id}/read", h.MarkNotificationRead)
+		})
+
+		// Waitlist Join
+		r.With(h.UserAuthMiddleware).Post("/waitlists/join", h.JoinWaitlist)
+
+		// Admin routes (JWT protected)
 		r.Route("/admin", func(r chi.Router) {
-			// TODO: r.Use(h.AdminAuthMiddleware)
+			r.Use(h.AdminAuthMiddleware)
 			r.Get("/metrics", h.GetAdminMetrics)
 			r.Get("/bookings", h.ListAllBookings)
+			// Stations admin
+			r.Post("/stations", h.CreateStation)
+			r.Put("/stations/{id}", h.UpdateStation)
+			r.Patch("/stations/{id}/status", h.ToggleStationStatus)
+
+			// Trains admin
+			r.Get("/trains", h.ListTrains)
+			r.Post("/trains", h.CreateTrain)
+			r.Put("/trains/{id}", h.UpdateTrain)
+			r.Delete("/trains/{id}", h.DeleteTrain)
+
+			// Coaches admin
+			r.Get("/trains/{trainId}/coaches", h.ListTrainCoaches)
+			r.Post("/trains/{trainId}/coaches", h.AddCoachToTrain)
+			r.Put("/coaches/{id}", h.UpdateCoach)
+			r.Delete("/coaches/{id}", h.RemoveCoach)
+
+			// Schedules admin
+			r.Get("/schedules", h.ListAdminSchedules)
+			r.Post("/schedules", h.CreateSchedule)
+			r.Put("/schedules/{id}", h.UpdateSchedule)
+			r.Patch("/schedules/{id}/status", h.ToggleScheduleStatus)
+
+			// Booking operations
+			r.Patch("/bookings/{id}/cancel", h.CancelBooking)
+			r.Get("/seats/{seatId}/occupancy", h.GetSeatOccupancy)
+
+			// Refund & Reschedule Requests
+			r.Get("/refund-requests", h.ListRefundRequests)
+			r.Patch("/refund-requests/{id}/approve", h.ApproveRefundRequest)
+			r.Patch("/refund-requests/{id}/reject", h.RejectRefundRequest)
+
+			r.Get("/reschedule-requests", h.ListRescheduleRequests)
+			r.Patch("/reschedule-requests/{id}/approve", h.ApproveRescheduleRequest)
+			r.Patch("/reschedule-requests/{id}/reject", h.RejectRescheduleRequest)
+
+			// Analytics
+			r.Get("/analytics/segments", h.GetSegmentAnalytics)
+			r.Get("/analytics/revenue", h.GetRevenueAnalytics)
+			r.Get("/analytics/chart", h.GetBookingChartAnalytics)
 		})
 	})
 }
@@ -104,4 +185,3 @@ func (h *Handler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		Services:  services,
 	})
 }
-

@@ -1,0 +1,2 @@
+ALTER TABLE stations DROP COLUMN IF EXISTS is_active;
+ALTER TABLE coaches DROP COLUMN IF EXISTS train_id;

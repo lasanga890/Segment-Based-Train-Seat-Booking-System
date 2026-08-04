@@ -41,6 +41,7 @@ type Coach struct {
 	ID          uuid.UUID `json:"id" db:"id"`
 	CoachNumber int       `json:"coach_number" db:"coach_number"`
 	CoachType   CoachType `json:"coach_type" db:"coach_type"`
+	CoachClass  string    `json:"coach_class" db:"coach_class"`
 	TotalSeats  int       `json:"total_seats" db:"total_seats"`
 	Label       string    `json:"label" db:"label"`
 }
@@ -109,6 +110,7 @@ type SeatAvailability struct {
 	SeatID      uuid.UUID `json:"seat_id"`
 	CoachNumber int       `json:"coach_number"`
 	CoachType   CoachType `json:"coach_type"`
+	CoachClass  string    `json:"coach_class"`
 	SeatNumber  int       `json:"seat_number"`
 	// available: seat is free for the entire queried leg
 	// partial:   seat has bookings on other legs but is free for queried leg
@@ -126,4 +128,31 @@ type FareBreakdown struct {
 	BaseRate          float64 `json:"base_rate_lkr"`
 	Multiplier        float64 `json:"multiplier"`
 	TotalFareLKR      float64 `json:"total_fare_lkr"`
+}
+
+// RefundRequest represents a user's refund request when they cancel eligible bookings.
+type RefundRequest struct {
+	ID               uuid.UUID `json:"id" db:"id"`
+	BookingID        uuid.UUID `json:"booking_id" db:"booking_id"`
+	UserID           uuid.UUID `json:"user_id" db:"user_id"`
+	RequestedAt      time.Time `json:"requested_at" db:"requested_at"`
+	RefundableAmount float64   `json:"refundable_amount" db:"refundable_amount"`
+	Status           string    `json:"status" db:"status"`
+	AdminNote        string    `json:"admin_note,omitempty" db:"admin_note"`
+	DecidedAt        *time.Time `json:"decided_at,omitempty" db:"decided_at"`
+}
+
+// RescheduleRequest captures a user's request to change date/seat/train for an existing booking.
+type RescheduleRequest struct {
+	ID                 uuid.UUID `json:"id" db:"id"`
+	BookingID          uuid.UUID `json:"booking_id" db:"booking_id"`
+	UserID             uuid.UUID `json:"user_id" db:"user_id"`
+	RequestedAt        time.Time `json:"requested_at" db:"requested_at"`
+	NewScheduleID      *uuid.UUID `json:"new_schedule_id,omitempty" db:"new_schedule_id"`
+	NewStartStationID  *uuid.UUID `json:"new_start_station_id,omitempty" db:"new_start_station_id"`
+	NewEndStationID    *uuid.UUID `json:"new_end_station_id,omitempty" db:"new_end_station_id"`
+	NewSeatID          *uuid.UUID `json:"new_seat_id,omitempty" db:"new_seat_id"`
+	Status             string     `json:"status" db:"status"`
+	AdminNote          string     `json:"admin_note,omitempty" db:"admin_note"`
+	DecidedAt          *time.Time `json:"decided_at,omitempty" db:"decided_at"`
 }

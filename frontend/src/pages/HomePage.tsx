@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock } from 'lucide-react'
-import { getStations, getSchedules, type Station, type Schedule } from '../services/api'
+import { Train, MapPin, ArrowRight, ChevronDown, Calendar, Clock, Route, CheckCircle2, User, LogOut, Bookmark } from 'lucide-react'
+import { getStations, getSchedules, getFavoriteRoutes, type Station, type Schedule, type FavoriteRoute } from '../services/api'
+import { useAuth } from '../context/AuthContext'
+import Navbar from '../components/Navbar'
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const { user, logoutUser } = useAuth()
   const [stations, setStations] = useState<Station[]>([])
+  const [favoriteRoutes, setFavoriteRoutes] = useState<FavoriteRoute[]>([])
   const [fromSeq, setFromSeq] = useState<string>('')
   const [toSeq, setToSeq] = useState<string>('')
   const [travelDate, setTravelDate] = useState<string>(() => {
-    // Default to today (local date in YYYY-MM-DD)
     return new Date().toISOString().split('T')[0]
   })
   const [loading, setLoading] = useState(true)
@@ -18,37 +21,58 @@ export default function HomePage() {
 
   // Schedules state
   const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string>('')
+  const [selectedClass, setSelectedClass] = useState<string>('SECOND')
   const [isSearchingTrains, setIsSearchingTrains] = useState(false)
 
   useEffect(() => {
     getStations()
-      .then(setStations)
-      .catch(() => setError('Failed to load stations. Is the backend running?'))
-      .finally(() => setLoading(false))
-  }, [])
+      .then((data) => {
+        data.sort((a, b) => a.distance_km - b.distance_km)
+        setStations(data)
+        setLoading(false)
+      })
+      .catch((err) => {
+        setError('Failed to load stations: ' + err.message)
+        setLoading(false)
+      })
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!fromSeq || !toSeq || !travelDate) return
-
-    const fromNum = parseInt(fromSeq)
-    const toNum = parseInt(toSeq)
-    const direction = fromNum < toNum ? 'UP' : 'DOWN'
-
-    setIsSearchingTrains(true)
-    setError('')
-    try {
-      const fetchedSchedules = await getSchedules(travelDate, direction)
-      setSchedules(fetchedSchedules)
-    } catch (err) {
-      setError('Failed to fetch available trains for this date.')
-    } finally {
-      setIsSearchingTrains(false)
+    if (user) {
+      getFavoriteRoutes().then(setFavoriteRoutes).catch(console.error)
     }
-  }
+  }, [user])
 
-  const handleSelectTrain = (scheduleId: string) => {
-    navigate(`/seats?schedule_id=${scheduleId}&from=${fromSeq}&to=${toSeq}`)
+  // Auto-fetch available trains whenever From, To, and Date are set
+  useEffect(() => {
+    if (fromSeq && toSeq && travelDate) {
+      const fromNum = parseInt(fromSeq)
+      const toNum = parseInt(toSeq)
+      const direction = fromNum < toNum ? 'UP' : 'DOWN'
+
+      setIsSearchingTrains(true)
+      setError('')
+      getSchedules(travelDate, direction)
+        .then(fetchedSchedules => {
+          setSchedules(fetchedSchedules)
+          if (fetchedSchedules.length > 0) {
+            setSelectedScheduleId(fetchedSchedules[0].id)
+          } else {
+            setSelectedScheduleId('')
+          }
+        })
+        .catch(() => setError('Failed to fetch available trains for this date.'))
+        .finally(() => setIsSearchingTrains(false))
+    } else {
+      setSchedules([])
+      setSelectedScheduleId('')
+    }
+  }, [fromSeq, toSeq, travelDate])
+
+  const handleProceedBooking = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedScheduleId || !fromSeq || !toSeq) return
+    const classQuery = selectedClass ? `&class=${selectedClass}` : ''
+    navigate(`/seats?schedule_id=${selectedScheduleId}&from=${fromSeq}&to=${toSeq}${classQuery}`)
   }
 
   const validDestinations = stations.filter(s => s.sequence_order !== parseInt(fromSeq || '-1'))
@@ -69,26 +93,9 @@ export default function HomePage() {
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-600/10 rounded-full blur-3xl" />
 
       <div className="relative z-10 min-h-screen flex flex-col">
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <header className="p-6 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-brand-600 rounded-xl flex items-center justify-center">
-              <Train size={20} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-white">SL Rail</h1>
-              <p className="text-xs text-slate-400">Scenic Booking</p>
-            </div>
-          </div>
-          <a
-            href="/admin"
-            className="text-sm text-slate-400 hover:text-slate-200 transition-colors"
-          >
-            Admin →
-          </a>
-        </header>
+        <Navbar />
 
-        {/* ── Hero ───────────────────────────────────────────────────── */}
+        {/* Hero */}
         <main className="flex-1 flex items-center justify-center px-4 py-12">
           <div className="w-full max-w-2xl">
             <motion.div
@@ -113,7 +120,29 @@ export default function HomePage() {
               </p>
             </motion.div>
 
-            {/* ── Search Form ──────────────────────────────────────────── */}
+            {/* Favorite Routes Quick Select */}
+            {user && favoriteRoutes.length > 0 && (
+              <div className="mb-4 flex items-center justify-center gap-2 flex-wrap text-xs">
+                <span className="text-slate-400 font-semibold flex items-center gap-1">
+                  <Bookmark size={13} className="text-amber-400" /> Favorites:
+                </span>
+                {favoriteRoutes.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => {
+                      setFromSeq(String(r.start_seq))
+                      setToSeq(String(r.end_seq))
+                    }}
+                    className="bg-slate-900/80 border border-white/10 hover:border-brand-500/50 px-3 py-1 rounded-full text-slate-300 hover:text-white transition-colors"
+                  >
+                    {r.label ? `${r.label}: ` : ''}{r.start_station_name} → {r.end_station_name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Search Form */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -126,7 +155,7 @@ export default function HomePage() {
                 </div>
               )}
 
-              <form onSubmit={handleSearch} className="space-y-5">
+              <form onSubmit={handleProceedBooking} className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* From */}
                   <div>
@@ -215,92 +244,116 @@ export default function HomePage() {
                   </motion.div>
                 )}
 
+                {/* ── INLINE AVAILABLE TRAINS (Rendered under date field and above Proceed Booking) ── */}
+                {fromSeq && toSeq && travelDate && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="space-y-3 pt-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                        Available Trains on {travelDate}
+                      </label>
+                      {schedules.length > 0 && (
+                        <span className="text-xs text-brand-400 font-medium">{schedules.length} train(s) found</span>
+                      )}
+                    </div>
+
+                    {isSearchingTrains ? (
+                      <div className="p-4 bg-white/5 rounded-xl border border-white/10 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                        <div className="w-4 h-4 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+                        Searching train schedules...
+                      </div>
+                    ) : schedules.length > 0 ? (
+                      <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                        {schedules.map(s => {
+                          const isSelected = selectedScheduleId === s.id
+                          return (
+                            <div
+                              key={s.id}
+                              onClick={() => setSelectedScheduleId(s.id)}
+                              className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between ${
+                                isSelected
+                                  ? 'bg-brand-600/20 border-brand-500 ring-1 ring-brand-500 shadow-lg'
+                                  : 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
+                              }`}
+                            >
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-100 text-sm">{s.train_name}</span>
+                                  <span className="text-[10px] bg-white/10 text-brand-300 px-1.5 py-0.5 rounded font-mono">
+                                    #{s.train_number}
+                                  </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                                  <span className="flex items-center gap-1 text-brand-300 font-semibold">
+                                    <Clock size={13} className="text-brand-400" />
+                                    {s.departure_time.slice(11, 16)}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-slate-300">
+                                    <Route size={13} className="text-slate-400" />
+                                    Main Route: {s.direction === 'UP' ? 'Colombo Fort ➔ Badulla' : 'Badulla ➔ Colombo Fort'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {isSelected && <CheckCircle2 size={18} className="text-brand-400" />}
+                                <input
+                                  type="radio"
+                                  name="inline_schedule_selection"
+                                  checked={isSelected}
+                                  onChange={() => setSelectedScheduleId(s.id)}
+                                  className="accent-brand-500 w-4 h-4 cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center text-xs text-amber-300">
+                        No active trains scheduled for this route on {travelDate}.
+                      </div>
+                    )}
+
+                    {/* Class Selector inline */}
+                    {schedules.length > 0 && (
+                      <div className="pt-2">
+                        <label className="block text-xs font-medium text-slate-400 mb-1.5">Select Travel Class</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {['FIRST', 'SECOND', 'THIRD'].map(cls => (
+                            <button
+                              key={cls}
+                              type="button"
+                              onClick={() => setSelectedClass(cls)}
+                              className={`py-2 px-3 text-xs font-semibold rounded-lg border transition-all ${
+                                selectedClass === cls
+                                  ? 'bg-brand-600 text-white border-brand-400 shadow-md'
+                                  : 'bg-white/5 border-white/10 text-slate-400 hover:text-white hover:bg-white/10'
+                              }`}
+                            >
+                              {cls === 'FIRST' ? '1st Class' : cls === 'SECOND' ? '2nd Class' : '3rd Class'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+
+                {/* Proceed Booking Button */}
                 <button
                   id="find-seats-btn"
                   type="submit"
-                  disabled={!fromSeq || !toSeq || isSearchingTrains}
-                  className="btn-primary w-full flex items-center justify-center gap-2"
+                  disabled={!fromSeq || !toSeq || !selectedScheduleId || isSearchingTrains}
+                  className="btn-primary w-full flex items-center justify-center gap-2 mt-4"
                 >
                   <Train size={18} />
-                  {isSearchingTrains ? 'Searching...' : 'Find Available Trains'}
+                  {isSearchingTrains ? 'Searching Trains...' : 'Proceed Booking'}
                 </button>
               </form>
             </motion.div>
-
-            {/* ── Available Trains (Schedules) ─────────────────────────── */}
-            {schedules.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mt-8 space-y-4"
-              >
-                <h3 className="text-lg font-semibold text-white mb-4">Available Trains</h3>
-                {schedules.map(schedule => (
-                  <div key={schedule.id} className="glass-card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center border border-brand-500/30">
-                        <Train size={24} className="text-brand-400" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-slate-100">{schedule.train_name}</h4>
-                        <div className="flex items-center gap-3 text-sm text-slate-400 mt-1">
-                          <span className="flex items-center gap-1"><Clock size={14}/> {schedule.departure_time.slice(11, 16)}</span>
-                          <span className="px-2 py-0.5 rounded-md bg-slate-800 text-xs font-medium">Train #{schedule.train_number}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleSelectTrain(schedule.id)}
-                      className="btn-primary py-2 px-6 w-full md:w-auto"
-                    >
-                      View Seats
-                    </button>
-                  </div>
-                ))}
-              </motion.div>
-            )}
-
-            {schedules.length === 0 && selectedFrom && selectedTo && !isSearchingTrains && (
-              <div className="mt-8 text-center text-slate-500">
-                <p>Click "Find Available Trains" to see schedules for {travelDate}</p>
-              </div>
-            )}
-
-            {/* ── Route Strip ─────────────────────────────────────────── */}
-            {!loading && stations.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.5 }}
-                className="mt-8 overflow-x-auto"
-              >
-                <div className="flex items-center gap-0 min-w-max mx-auto">
-                  {stations.map((s, i) => (
-                    <div key={s.id} className="flex items-center">
-                      <div className="flex flex-col items-center">
-                        <div className={`w-2 h-2 rounded-full ${
-                          s.sequence_order === parseInt(fromSeq) ? 'bg-brand-400 w-3 h-3' :
-                          s.sequence_order === parseInt(toSeq)   ? 'bg-cyan-400 w-3 h-3' :
-                          'bg-slate-600'
-                        }`} />
-                        {(i === 0 || i === stations.length - 1 ||
-                          s.sequence_order === parseInt(fromSeq) ||
-                          s.sequence_order === parseInt(toSeq)) && (
-                          <span className="text-[10px] text-slate-500 mt-1 whitespace-nowrap">{s.code}</span>
-                        )}
-                      </div>
-                      {i < stations.length - 1 && (
-                        <div className={`h-px w-6 ${
-                          parseInt(fromSeq) <= s.sequence_order && s.sequence_order < parseInt(toSeq)
-                            ? 'bg-brand-500'
-                            : 'bg-slate-700'
-                        }`} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
           </div>
         </main>
       </div>

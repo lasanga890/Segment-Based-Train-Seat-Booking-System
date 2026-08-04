@@ -1,22 +1,36 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/lasanga890/segment-train-booking/internal/auth"
 	"github.com/lasanga890/segment-train-booking/internal/models"
 	"github.com/lasanga890/segment-train-booking/internal/services"
 )
 
-// ─── Schedules ────────────────────────────────────────────────────────────────
+// autoDeactivateExpiredSchedules deactivates schedules departing within 1 hour (or already departed)
+func (h *Handler) autoDeactivateExpiredSchedules(ctx context.Context) {
+	_, _ = h.db.Exec(ctx, `
+		UPDATE schedules
+		SET is_active = false,
+		    cancel_reason = COALESCE(cancel_reason, 'Departure within 1 hour')
+		WHERE is_active = true
+		  AND (departure_date + departure_time::time) <= (NOW() + INTERVAL '1 hour')
+	`)
+}
 
 // ListSchedules returns train schedules filtered by date and direction.
 // GET /api/v1/schedules?date=YYYY-MM-DD&direction=UP
 func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
+
 	dateStr := r.URL.Query().Get("date")
 	direction := r.URL.Query().Get("direction")
 
@@ -31,6 +45,7 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 		FROM schedules s
 		JOIN trains t ON t.id = s.train_id
 		WHERE s.departure_date = $1 AND t.direction = $2 AND s.is_active = true
+		  AND (s.departure_date + s.departure_time::time) > (NOW() + INTERVAL '1 hour')
 		ORDER BY s.departure_time ASC
 	`, dateStr, direction)
 	if err != nil {
@@ -54,16 +69,97 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, schedules)
 }
 
-// ─── Stations ─────────────────────────────────────────────────────────────────
+// Stations
 
 // ListStations returns all stations in sequence order.
 // GET /api/v1/stations
+// ListStations returns all stations in sequence order.
+// GET /api/v1/stations?all=true
 func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(), `
-		SELECT id, name, code, sequence_order, distance_km, created_at
+	allStr := r.URL.Query().Get("all")
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	whereClause := ""
+	if allStr != "true" {
+		whereClause = " WHERE is_active = true"
+	}
+
+	if pageStr != "" {
+		page, _ := strconv.Atoi(pageStr)
+		if page < 1 {
+			page = 1
+		}
+		limit, _ := strconv.Atoi(limitStr)
+		if limit < 1 {
+			limit = 10
+		}
+
+		var total int
+		countQuery := "SELECT COUNT(*) FROM stations" + whereClause
+		if err := h.db.QueryRow(r.Context(), countQuery).Scan(&total); err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to count stations")
+			return
+		}
+
+		offset := (page - 1) * limit
+		query := fmt.Sprintf(`
+			SELECT id, name, code, sequence_order, distance_km, is_active, created_at
+			FROM stations %s
+			ORDER BY distance_km ASC
+			LIMIT %d OFFSET %d
+		`, whereClause, limit, offset)
+
+		rows, err := h.db.Query(r.Context(), query)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to fetch stations")
+			return
+		}
+		defer rows.Close()
+
+		type stationRow struct {
+			ID            string  `json:"id"`
+			Name          string  `json:"name"`
+			Code          string  `json:"code"`
+			SequenceOrder int     `json:"sequence_order"`
+			DistanceKM    float64 `json:"distance_km"`
+			IsActive      bool    `json:"is_active"`
+		}
+
+		var stations []stationRow
+		for rows.Next() {
+			var s stationRow
+			var createdAt interface{}
+			if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.SequenceOrder, &s.DistanceKM, &s.IsActive, &createdAt); err != nil {
+				writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+				return
+			}
+			stations = append(stations, s)
+		}
+		if stations == nil {
+			stations = []stationRow{}
+		}
+
+		totalPages := 0
+		if limit > 0 {
+			totalPages = (total + limit - 1) / limit
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"data":        stations,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+		return
+	}
+
+	query := `
+		SELECT id, name, code, sequence_order, distance_km, is_active, created_at
 		FROM stations
-		ORDER BY sequence_order ASC
-	`)
+	` + whereClause + " ORDER BY distance_km ASC"
+
+	rows, err := h.db.Query(r.Context(), query)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch stations")
 		return
@@ -76,14 +172,15 @@ func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
 		Code          string  `json:"code"`
 		SequenceOrder int     `json:"sequence_order"`
 		DistanceKM    float64 `json:"distance_km"`
+		IsActive      bool    `json:"is_active"`
 	}
 
 	var stations []stationRow
 	for rows.Next() {
 		var s stationRow
 		var createdAt interface{}
-		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.SequenceOrder, &s.DistanceKM, &createdAt); err != nil {
-			writeError(w, http.StatusInternalServerError, "Scan error")
+		if err := rows.Scan(&s.ID, &s.Name, &s.Code, &s.SequenceOrder, &s.DistanceKM, &s.IsActive, &createdAt); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
 		stations = append(stations, s)
@@ -94,7 +191,7 @@ func (h *Handler) ListStations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, stations)
 }
 
-// ─── Coaches ──────────────────────────────────────────────────────────────────
+// Coaches
 
 // ListCoaches returns all coaches with type and seat count.
 // GET /api/v1/coaches
@@ -133,17 +230,100 @@ func (h *Handler) ListCoaches(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, coaches)
 }
 
-// ─── Seat Availability ────────────────────────────────────────────────────────
+// ListScheduleCoaches returns coaches for the train associated with a schedule.
+// Used by the user-side coach selection modal.
+// GET /api/v1/schedules/{scheduleId}/coaches
+func (h *Handler) ListScheduleCoaches(w http.ResponseWriter, r *http.Request) {
+	scheduleIDStr := chi.URLParam(r, "scheduleId")
+	scheduleID, err := uuid.Parse(scheduleIDStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid schedule_id")
+		return
+	}
+
+	classQuery := r.URL.Query().Get("coach_class")
+	if classQuery == "" {
+		classQuery = r.URL.Query().Get("class")
+	}
+
+	query := `
+		SELECT
+			c.id::text,
+			c.coach_number,
+			c.coach_type,
+			COALESCE(c.coach_class, 'SECOND'),
+			c.total_seats,
+			COALESCE(c.label, ''),
+			(
+				SELECT COUNT(DISTINCT s2.id)
+				FROM seats s2
+				JOIN bookings b2 ON b2.seat_id = s2.id
+				WHERE s2.coach_id = c.id
+				  AND b2.schedule_id = $1
+				  AND b2.status IN ('CONFIRMED', 'HOLD')
+			) AS booked_seats
+		FROM coaches c
+		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id AND sch.is_active = true
+		  AND (sch.departure_date + sch.departure_time::time) > (NOW() + INTERVAL '1 hour')
+		WHERE c.coach_type = 'RESERVED'
+	`
+
+	var args []interface{}
+	args = append(args, scheduleID)
+
+	if classQuery != "" {
+		query += " AND UPPER(c.coach_class) = UPPER($2)"
+		args = append(args, classQuery)
+	}
+
+	query += " ORDER BY c.coach_class, c.coach_number"
+
+	rows, err := h.db.Query(r.Context(), query, args...)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to fetch schedule coaches: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type coachRow struct {
+		ID          string `json:"id"`
+		CoachNumber int    `json:"coach_number"`
+		CoachType   string `json:"coach_type"`
+		CoachClass  string `json:"coach_class"`
+		TotalSeats  int    `json:"total_seats"`
+		Label       string `json:"label"`
+		BookedSeats int    `json:"booked_seats"`
+	}
+
+	var coaches []coachRow
+	for rows.Next() {
+		var c coachRow
+		if err := rows.Scan(&c.ID, &c.CoachNumber, &c.CoachType, &c.CoachClass, &c.TotalSeats, &c.Label, &c.BookedSeats); err != nil {
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+			return
+		}
+		coaches = append(coaches, c)
+	}
+	if coaches == nil {
+		coaches = []coachRow{}
+	}
+	writeJSON(w, http.StatusOK, coaches)
+}
+
+// Seat Availability
 
 // GetSeatAvailability returns all RESERVED seats with status for the requested leg.
 // GET /api/v1/seats/availability?from=0&to=9
 func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
+
 	fromStr := r.URL.Query().Get("from")
 	toStr := r.URL.Query().Get("to")
 	scheduleIDStr := r.URL.Query().Get("schedule_id")
+	coachClass := r.URL.Query().Get("coach_class")
 
-	if fromStr == "" || toStr == "" || scheduleIDStr == "" {
-		writeError(w, http.StatusBadRequest, "Query params 'from', 'to', and 'schedule_id' are required")
+	if fromStr == "" || toStr == "" || scheduleIDStr == "" || coachClass == "" {
+		writeError(w, http.StatusBadRequest, "Query params 'from', 'to', 'schedule_id', and 'coach_class' are required")
 		return
 	}
 
@@ -165,7 +345,7 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 	}
 
 	svc := services.NewAvailabilityService(h.db)
-	seats, err := svc.GetAvailability(r.Context(), scheduleID, fromSeq, toSeq)
+	seats, err := svc.GetAvailability(r.Context(), scheduleID, coachClass, fromSeq, toSeq)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to fetch seat availability")
 		return
@@ -176,11 +356,12 @@ func (h *Handler) GetSeatAvailability(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, seats)
 }
 
-// ─── Bookings ────────────────────────────────────────────────────────────────
+// Bookings
 
 // HoldSeat places a temporary 5-minute hold on a seat for a leg.
 // POST /api/v1/bookings/hold
 func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
 	var req struct {
 		ScheduleID string `json:"schedule_id"`
 		SeatID     string `json:"seat_id"`
@@ -211,6 +392,10 @@ func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "Seat is not available for the requested segment")
 			return
 		}
+		if err == services.ErrScheduleUnavailable {
+			writeError(w, http.StatusConflict, "This schedule is no longer available for booking")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "Failed to hold seat")
 		return
 	}
@@ -222,6 +407,89 @@ func (h *Handler) HoldSeat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HoldManySeats places holds on multiple seats in a single request.
+// POST /api/v1/bookings/hold-many
+func (h *Handler) HoldManySeats(w http.ResponseWriter, r *http.Request) {
+	h.autoDeactivateExpiredSchedules(r.Context())
+	var req struct {
+		ScheduleID string   `json:"schedule_id"`
+		SeatIDs    []string `json:"seat_ids"`
+		FromSeq    int      `json:"from_seq"`
+		ToSeq      int      `json:"to_seq"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+	if len(req.SeatIDs) == 0 || len(req.SeatIDs) > 6 {
+		writeError(w, http.StatusBadRequest, "Between 1 and 6 seat_ids required")
+		return
+	}
+
+	scheduleID, err := uuid.Parse(req.ScheduleID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid schedule_id")
+		return
+	}
+
+	bookingSvc := services.NewBookingService(h.db, h.rdb, h.newFareService(), h.cfg.SeatHoldDurationMinutes)
+
+	type holdItem struct {
+		HoldID    string      `json:"hold_id"`
+		SeatID    string      `json:"seat_id"`
+		ExpiresAt interface{} `json:"expires_at"`
+		Fare      interface{} `json:"fare"`
+	}
+
+	results := make([]holdItem, 0, len(req.SeatIDs))
+	heldKeys := []string{} // track holds to release if one fails
+
+	for _, seatIDStr := range req.SeatIDs {
+		seatID, err := uuid.Parse(seatIDStr)
+		if err != nil {
+			// Release all successfully placed holds before returning
+			for _, hid := range heldKeys {
+				bookingSvc.ReleaseHold(r.Context(), hid)
+			}
+			writeError(w, http.StatusBadRequest, "Invalid seat_id: "+seatIDStr)
+			return
+		}
+
+		result, err := bookingSvc.HoldSeat(r.Context(), services.HoldRequest{
+			ScheduleID: scheduleID,
+			SeatID:     seatID,
+			FromSeq:    req.FromSeq,
+			ToSeq:      req.ToSeq,
+		})
+		if err != nil {
+			// Release all previously held seats atomically
+			for _, hid := range heldKeys {
+				bookingSvc.ReleaseHold(r.Context(), hid)
+			}
+			if err == services.ErrSeatNotAvailable {
+				writeError(w, http.StatusConflict, "One or more seats are not available: "+seatIDStr)
+				return
+			}
+			if err == services.ErrScheduleUnavailable {
+				writeError(w, http.StatusConflict, "This schedule is no longer available for booking")
+				return
+			}
+			writeError(w, http.StatusInternalServerError, "Failed to hold seat: "+seatIDStr)
+			return
+		}
+
+		heldKeys = append(heldKeys, result.HoldID)
+		results = append(results, holdItem{
+			HoldID:    result.HoldID,
+			SeatID:    seatIDStr,
+			ExpiresAt: result.ExpiresAt,
+			Fare:      result.Fare,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, results)
+}
+
 // ConfirmBooking converts a hold into a confirmed booking (with DB transaction locking).
 // POST /api/v1/bookings/confirm
 func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +499,7 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 		PassengerEmail string `json:"passenger_email"`
 		StartStationID string `json:"start_station_id"`
 		EndStationID   string `json:"end_station_id"`
+		UserID         string `json:"user_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request body")
@@ -269,7 +538,70 @@ func (h *Handler) ConfirmBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, booking)
+	var userID *string
+	if claims, ok := r.Context().Value(UserClaimsKey).(*auth.Claims); ok && claims != nil {
+		userID = &claims.UserID
+	} else if req.UserID != "" {
+		userID = &req.UserID
+	}
+	if userID != nil {
+		_, _ = h.db.Exec(r.Context(), "UPDATE bookings SET user_id = $1 WHERE id = $2", *userID, booking.ID)
+	}
+
+	// Fetch full details with joined train, schedule, coach, seat, and station names
+	var fullBooking struct {
+		ID               string  `json:"id"`
+		PassengerName    string  `json:"passenger_name"`
+		PassengerEmail   string  `json:"passenger_email"`
+		SeatID           string  `json:"seat_id"`
+		StartStationName string  `json:"start_station_name"`
+		EndStationName   string  `json:"end_station_name"`
+		StartSeq         int     `json:"start_seq"`
+		EndSeq           int     `json:"end_seq"`
+		FareLKR          float64 `json:"fare_lkr"`
+		Status           string  `json:"status"`
+		CoachNumber      int     `json:"coach_number"`
+		SeatNumber       int     `json:"seat_number"`
+		CreatedAt        string  `json:"created_at"`
+		TrainName        string  `json:"train_name"`
+		TrainNumber      string  `json:"train_number"`
+		CoachClass       string  `json:"coach_class"`
+		DepartureDate    string  `json:"departure_date"`
+		DepartureTime    string  `json:"departure_time"`
+	}
+
+	err = h.db.QueryRow(r.Context(), `
+		SELECT
+			b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''), b.seat_id::text,
+			s_start.name, s_end.name,
+			b.start_seq, b.end_seq, b.fare_lkr, b.status,
+			c.coach_number, s.seat_number,
+			b.created_at::text,
+			COALESCE(t.name, ''), COALESCE(t.train_number, ''),
+			COALESCE(c.coach_class, 'SECOND'),
+			COALESCE(sch.departure_date::text, ''), COALESCE(sch.departure_time::text, '')
+		FROM bookings b
+		JOIN stations s_start ON s_start.id = b.start_station_id
+		JOIN stations s_end   ON s_end.id   = b.end_station_id
+		JOIN seats s          ON s.id        = b.seat_id
+		JOIN coaches c        ON c.id        = s.coach_id
+		LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+		LEFT JOIN trains t     ON t.id      = sch.train_id
+		WHERE b.id = $1
+	`, booking.ID).Scan(
+		&fullBooking.ID, &fullBooking.PassengerName, &fullBooking.PassengerEmail, &fullBooking.SeatID,
+		&fullBooking.StartStationName, &fullBooking.EndStationName,
+		&fullBooking.StartSeq, &fullBooking.EndSeq, &fullBooking.FareLKR, &fullBooking.Status,
+		&fullBooking.CoachNumber, &fullBooking.SeatNumber, &fullBooking.CreatedAt,
+		&fullBooking.TrainName, &fullBooking.TrainNumber,
+		&fullBooking.CoachClass, &fullBooking.DepartureDate, &fullBooking.DepartureTime,
+	)
+	if err != nil {
+		writeJSON(w, http.StatusCreated, booking)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, fullBooking)
 }
 
 // ReleaseHold cancels a hold when the user exits checkout.
@@ -308,26 +640,38 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 		CoachNumber      int     `json:"coach_number"`
 		SeatNumber       int     `json:"seat_number"`
 		CreatedAt        string  `json:"created_at"`
+		TrainName        string  `json:"train_name"`
+		TrainNumber      string  `json:"train_number"`
+		CoachClass       string  `json:"coach_class"`
+		DepartureDate    string  `json:"departure_date"`
+		DepartureTime    string  `json:"departure_time"`
 	}
 
 	err = h.db.QueryRow(r.Context(), `
 		SELECT
-			b.id, b.passenger_name, b.passenger_email, b.seat_id,
+			b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''), b.seat_id::text,
 			s_start.name, s_end.name,
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
 			c.coach_number, s.seat_number,
-			b.created_at
+			b.created_at::text,
+			COALESCE(t.name, ''), COALESCE(t.train_number, ''),
+			COALESCE(c.coach_class, 'SECOND'),
+			COALESCE(sch.departure_date::text, ''), COALESCE(sch.departure_time::text, '')
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
 		JOIN seats s          ON s.id        = b.seat_id
 		JOIN coaches c        ON c.id        = s.coach_id
+		LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+		LEFT JOIN trains t     ON t.id      = sch.train_id
 		WHERE b.id = $1
 	`, bookingID).Scan(
 		&booking.ID, &booking.PassengerName, &booking.PassengerEmail, &booking.SeatID,
 		&booking.StartStationName, &booking.EndStationName,
 		&booking.StartSeq, &booking.EndSeq, &booking.FareLKR, &booking.Status,
 		&booking.CoachNumber, &booking.SeatNumber, &booking.CreatedAt,
+		&booking.TrainName, &booking.TrainNumber,
+		&booking.CoachClass, &booking.DepartureDate, &booking.DepartureTime,
 	)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "Booking not found")
@@ -343,9 +687,9 @@ func (h *Handler) GetBooking(w http.ResponseWriter, r *http.Request) {
 // GET /api/v1/admin/metrics
 func (h *Handler) GetAdminMetrics(w http.ResponseWriter, r *http.Request) {
 	type metrics struct {
-		TotalBookings    int     `json:"total_bookings"`
-		TotalRevenueLKR  float64 `json:"total_revenue_lkr"`
-		OccupancyRate    float64 `json:"occupancy_rate"`
+		TotalBookings   int     `json:"total_bookings"`
+		TotalRevenueLKR float64 `json:"total_revenue_lkr"`
+		OccupancyRate   float64 `json:"occupancy_rate"`
 	}
 
 	var m metrics
@@ -364,24 +708,188 @@ func (h *Handler) GetAdminMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListAllBookings returns all bookings for admin view.
-// GET /api/v1/admin/bookings
+// GET /api/v1/admin/bookings?status=CONFIRMED&search=john&date=2026-08-01&train_id=...&coach_class=SECOND
 func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.db.Query(r.Context(), `
+	statusFilter := r.URL.Query().Get("status")
+	searchFilter := r.URL.Query().Get("search")
+	dateFilter := r.URL.Query().Get("date")
+	trainIDFilter := r.URL.Query().Get("train_id")
+	classFilter := r.URL.Query().Get("coach_class")
+
+	// Build dynamic WHERE clause
+	conditions := []string{"1=1"}
+	args := []interface{}{}
+	argIdx := 1
+
+	if statusFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("b.status = $%d", argIdx))
+		args = append(args, statusFilter)
+		argIdx++
+	}
+	if searchFilter != "" {
+		conditions = append(conditions, fmt.Sprintf(
+			"(b.passenger_name ILIKE $%d OR b.passenger_email ILIKE $%d OR b.id::text ILIKE $%d)",
+			argIdx, argIdx, argIdx,
+		))
+		args = append(args, "%"+searchFilter+"%")
+		argIdx++
+	}
+	if dateFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("b.created_at::date = $%d", argIdx))
+		args = append(args, dateFilter)
+		argIdx++
+	}
+	if trainIDFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("t.id = $%d", argIdx))
+		args = append(args, trainIDFilter)
+		argIdx++
+	}
+	if classFilter != "" {
+		conditions = append(conditions, fmt.Sprintf("c.coach_class = $%d", argIdx))
+		args = append(args, classFilter)
+		argIdx++
+	}
+
+	whereClause := ""
+	for i, c := range conditions {
+		if i == 0 {
+			whereClause = "WHERE " + c
+		} else {
+			whereClause += " AND " + c
+		}
+	}
+
+	pageStr := r.URL.Query().Get("page")
+	limitStr := r.URL.Query().Get("limit")
+
+	if pageStr != "" {
+		page, _ := strconv.Atoi(pageStr)
+		if page < 1 {
+			page = 1
+		}
+		limit, _ := strconv.Atoi(limitStr)
+		if limit < 1 {
+			limit = 10
+		}
+
+		var total int
+		countQuery := fmt.Sprintf(`
+			SELECT COUNT(*)
+			FROM bookings b
+			JOIN stations s_start ON s_start.id = b.start_station_id
+			JOIN stations s_end   ON s_end.id   = b.end_station_id
+			JOIN seats s          ON s.id        = b.seat_id
+			JOIN coaches c        ON c.id        = s.coach_id
+			LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+			LEFT JOIN trains t     ON t.id      = sch.train_id
+			%s
+		`, whereClause)
+		if err := h.db.QueryRow(r.Context(), countQuery, args...).Scan(&total); err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to count bookings: "+err.Error())
+			return
+		}
+
+		offset := (page - 1) * limit
+		query := fmt.Sprintf(`
+			SELECT
+				b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''),
+				s_start.name, s_end.name,
+				b.start_seq, b.end_seq, b.fare_lkr, b.status,
+				c.coach_number, s.seat_number, b.created_at::text,
+				COALESCE(t.id::text, ''), COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(c.coach_class, 'SECOND')
+			FROM bookings b
+			JOIN stations s_start ON s_start.id = b.start_station_id
+			JOIN stations s_end   ON s_end.id   = b.end_station_id
+			JOIN seats s          ON s.id        = b.seat_id
+			JOIN coaches c        ON c.id        = s.coach_id
+			LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+			LEFT JOIN trains t     ON t.id      = sch.train_id
+			%s
+			ORDER BY b.created_at DESC
+			LIMIT %d OFFSET %d
+		`, whereClause, limit, offset)
+
+		rows, err := h.db.Query(r.Context(), query, args...)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "Failed to fetch bookings: "+err.Error())
+			return
+		}
+		defer rows.Close()
+
+		type bookingRow struct {
+			ID               string  `json:"id"`
+			PassengerName    string  `json:"passenger_name"`
+			PassengerEmail   string  `json:"passenger_email"`
+			StartStationName string  `json:"start_station_name"`
+			EndStationName   string  `json:"end_station_name"`
+			StartSeq         int     `json:"start_seq"`
+			EndSeq           int     `json:"end_seq"`
+			FareLKR          float64 `json:"fare_lkr"`
+			Status           string  `json:"status"`
+			CoachNumber      int     `json:"coach_number"`
+			SeatNumber       int     `json:"seat_number"`
+			CreatedAt        string  `json:"created_at"`
+			TrainID          string  `json:"train_id"`
+			TrainName        string  `json:"train_name"`
+			TrainNumber      string  `json:"train_number"`
+			CoachClass       string  `json:"coach_class"`
+		}
+
+		var bookings []bookingRow
+		for rows.Next() {
+			var b bookingRow
+			if err := rows.Scan(
+				&b.ID, &b.PassengerName, &b.PassengerEmail,
+				&b.StartStationName, &b.EndStationName,
+				&b.StartSeq, &b.EndSeq, &b.FareLKR, &b.Status,
+				&b.CoachNumber, &b.SeatNumber, &b.CreatedAt,
+				&b.TrainID, &b.TrainName, &b.TrainNumber, &b.CoachClass,
+			); err != nil {
+				writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
+				return
+			}
+			bookings = append(bookings, b)
+		}
+		if bookings == nil {
+			bookings = []bookingRow{}
+		}
+
+		totalPages := 0
+		if limit > 0 {
+			totalPages = (total + limit - 1) / limit
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"data":        bookings,
+			"total":       total,
+			"page":        page,
+			"limit":       limit,
+			"total_pages": totalPages,
+		})
+		return
+	}
+
+	query := fmt.Sprintf(`
 		SELECT
-			b.id, b.passenger_name, b.passenger_email,
+			b.id::text, b.passenger_name, COALESCE(b.passenger_email, ''),
 			s_start.name, s_end.name,
 			b.start_seq, b.end_seq, b.fare_lkr, b.status,
-			c.coach_number, s.seat_number, b.created_at
+			c.coach_number, s.seat_number, b.created_at::text,
+			COALESCE(t.id::text, ''), COALESCE(t.name, ''), COALESCE(t.train_number, ''), COALESCE(c.coach_class, 'SECOND')
 		FROM bookings b
 		JOIN stations s_start ON s_start.id = b.start_station_id
 		JOIN stations s_end   ON s_end.id   = b.end_station_id
 		JOIN seats s          ON s.id        = b.seat_id
 		JOIN coaches c        ON c.id        = s.coach_id
+		LEFT JOIN schedules sch ON sch.id    = b.schedule_id
+		LEFT JOIN trains t     ON t.id      = sch.train_id
+		%s
 		ORDER BY b.created_at DESC
 		LIMIT 500
-	`)
+	`, whereClause)
+
+	rows, err := h.db.Query(r.Context(), query, args...)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Failed to fetch bookings")
+		writeError(w, http.StatusInternalServerError, "Failed to fetch bookings: "+err.Error())
 		return
 	}
 	defer rows.Close()
@@ -399,6 +907,10 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 		CoachNumber      int     `json:"coach_number"`
 		SeatNumber       int     `json:"seat_number"`
 		CreatedAt        string  `json:"created_at"`
+		TrainID          string  `json:"train_id"`
+		TrainName        string  `json:"train_name"`
+		TrainNumber      string  `json:"train_number"`
+		CoachClass       string  `json:"coach_class"`
 	}
 
 	var bookings []bookingRow
@@ -409,8 +921,9 @@ func (h *Handler) ListAllBookings(w http.ResponseWriter, r *http.Request) {
 			&b.StartStationName, &b.EndStationName,
 			&b.StartSeq, &b.EndSeq, &b.FareLKR, &b.Status,
 			&b.CoachNumber, &b.SeatNumber, &b.CreatedAt,
+			&b.TrainID, &b.TrainName, &b.TrainNumber, &b.CoachClass,
 		); err != nil {
-			writeError(w, http.StatusInternalServerError, "Scan error")
+			writeError(w, http.StatusInternalServerError, "Scan error: "+err.Error())
 			return
 		}
 		bookings = append(bookings, b)

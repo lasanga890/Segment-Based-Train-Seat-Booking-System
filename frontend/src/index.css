@@ -33,12 +33,12 @@
 }
 
 @layer components {
-  /* ── Glass card effect ─────────────────────────────────────────────────── */
+  /* Glass card effect */
   .glass-card {
     @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
   }
 
-  /* ── Seat status badges ─────────────────────────────────────────────────── */
+  /* Seat status badges */
   .seat {
     @apply w-10 h-10 rounded-lg flex items-center justify-center text-xs font-semibold
            cursor-pointer transition-all duration-200 select-none border-2;
@@ -68,20 +68,20 @@
     @apply seat bg-seat-hold/20 border-seat-hold/50 text-seat-hold/60 cursor-not-allowed;
   }
 
-  /* ── Primary button ─────────────────────────────────────────────────────── */
+  /* Primary button */
   .btn-primary {
     @apply bg-brand-600 hover:bg-brand-500 text-white font-semibold px-6 py-3
            rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-95
            disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100;
   }
 
-  /* ── Secondary button ───────────────────────────────────────────────────── */
+  /* Secondary button */
   .btn-secondary {
     @apply bg-white/10 hover:bg-white/20 text-slate-200 font-medium px-6 py-3
            rounded-xl border border-white/10 transition-all duration-200;
   }
 
-  /* ── Form input ─────────────────────────────────────────────────────────── */
+  /* Form input */
   .input-field {
     @apply w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3
            text-slate-100 placeholder-slate-500 focus:outline-none
@@ -89,8 +89,62 @@
            transition-colors duration-200;
   }
 
-  /* ── Select dropdown ────────────────────────────────────────────────────── */
+  /* Select dropdown */
   .select-field {
     @apply input-field appearance-none cursor-pointer;
+  }
+
+  select option {
+    color: #0f172a !important;
+    background-color: #ffffff !important;
+  }
+}
+
+@media print {
+  @page {
+    size: portrait;
+    margin: 5mm;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide web page container elements */
+  body * {
+    visibility: hidden !important;
+  }
+
+  /* Show only the thermal receipt container */
+  .printable-thermal-receipt,
+  .printable-thermal-receipt * {
+    visibility: visible !important;
+  }
+
+  .printable-thermal-receipt {
+    position: absolute !important;
+    top: 0 !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 12px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: 1px dashed #000000 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .no-print {
+    display: none !important;
   }
 }

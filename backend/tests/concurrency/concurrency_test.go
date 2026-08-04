@@ -80,7 +80,7 @@ func TestConcurrentBookingSameSeat(t *testing.T) {
 			switch confirmResp.StatusCode {
 			case http.StatusCreated:
 				atomic.AddInt64(&successCount, 1)
-				t.Logf("✅ Worker %d: booking confirmed!", workerID)
+				t.Logf("Worker %d: booking confirmed!", workerID)
 			case http.StatusConflict:
 				atomic.AddInt64(&conflictCount, 1)
 			default:
@@ -93,7 +93,7 @@ func TestConcurrentBookingSameSeat(t *testing.T) {
 
 	t.Logf("Results: success=%d, conflict=%d, errors=%d", successCount, conflictCount, otherErrors)
 
-	// ── Assertions ──────────────────────────────────────────────────────────
+	// Assertions
 	if successCount != 1 {
 		t.Errorf("Expected exactly 1 successful booking, got %d", successCount)
 	}
@@ -105,7 +105,7 @@ func TestConcurrentBookingSameSeat(t *testing.T) {
 	}
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 func getEnvOrSkip(t *testing.T, key string) string {
 	t.Helper()

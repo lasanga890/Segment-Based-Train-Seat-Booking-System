@@ -53,6 +53,6 @@ CROSS JOIN generate_series(1, c.total_seats) AS s(num)
 WHERE c.coach_type = 'RESERVED';
 
 -- ─── Default admin user (password: admin123 — CHANGE IN PRODUCTION) ───────────
--- bcrypt hash of 'admin123' (cost factor 10)
+-- bcrypt hash of 'admin123' (cost factor 12)
 INSERT INTO admin_users (username, password_hash) VALUES
-    ('admin', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhy2');
+    ('admin', '$2a$12$pKXoAecOmMOreh.gUIiYWuhdX1e6TKQC9UzQePPKXS7W/07d9nuTe');

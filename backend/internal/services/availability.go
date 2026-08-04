@@ -19,6 +19,7 @@ func NewAvailabilityService(db *pgxpool.Pool) *AvailabilityService {
 }
 
 // GetAvailability returns all seats in RESERVED coaches with their status for the leg [fromSeq, toSeq).
+// Only seats belonging to the train linked to the given schedule are returned.
 //
 // Status values:
 //   - "available": no confirmed/held booking overlaps this leg at all
@@ -27,7 +28,7 @@ func NewAvailabilityService(db *pgxpool.Pool) *AvailabilityService {
 //
 // The query uses a LEFT JOIN + CASE to determine overlap in a single DB round-trip.
 // Index on (seat_id, start_seq, end_seq) WHERE status IN ('HOLD','CONFIRMED') makes this fast.
-func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uuid.UUID, fromSeq, toSeq int) ([]models.SeatAvailability, error) {
+func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uuid.UUID, coachClass string, fromSeq, toSeq int) ([]models.SeatAvailability, error) {
 	if fromSeq >= toSeq {
 		return nil, fmt.Errorf("fromSeq (%d) must be less than toSeq (%d)", fromSeq, toSeq)
 	}
@@ -37,6 +38,7 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uu
 			s.id           AS seat_id,
 			c.coach_number,
 			c.coach_type,
+			c.coach_class,
 			s.seat_number,
 			CASE
 				-- Any confirmed or held booking that overlaps [fromSeq, toSeq)?
@@ -59,11 +61,13 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uu
 			END AS status
 		FROM seats s
 		JOIN coaches c ON c.id = s.coach_id
-		WHERE c.coach_type = 'RESERVED'
+		-- KEY FIX: only return coaches that belong to the schedule's train
+		JOIN schedules sch ON sch.id = $1 AND sch.train_id = c.train_id AND sch.is_active = true
+		WHERE c.coach_type = 'RESERVED' AND c.coach_class = $4
 		ORDER BY c.coach_number, s.seat_number
 	`
 
-	rows, err := s.db.Query(ctx, query, scheduleID, fromSeq, toSeq)
+	rows, err := s.db.Query(ctx, query, scheduleID, fromSeq, toSeq, coachClass)
 	if err != nil {
 		return nil, fmt.Errorf("availability query failed: %w", err)
 	}
@@ -76,6 +80,7 @@ func (s *AvailabilityService) GetAvailability(ctx context.Context, scheduleID uu
 			&sa.SeatID,
 			&sa.CoachNumber,
 			&sa.CoachType,
+			&sa.CoachClass,
 			&sa.SeatNumber,
 			&sa.Status,
 		); err != nil {
