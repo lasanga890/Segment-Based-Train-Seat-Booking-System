@@ -1,10 +1,10 @@
-# Segment-Based Train Seat Booking System 🚆🇱🇰
+# Segment-Based Train Seat Booking System 
 
 A high-concurrency, enterprise-grade segment-based train seat reservation platform designed for scenic and regional railway lines (such as Sri Lanka Railways). The system enables dynamic seat re-allocation across station legs, guaranteeing maximum train capacity utilization while preventing double bookings through Redis distributed locking and PostgreSQL atomic transactions.
 
 ---
 
-## 📌 Executive Summary & Architecture Overview
+##  Executive Summary & Architecture Overview
 
 Traditional train booking engines treat an entire journey as a static unit, rendering a seat unavailable for the whole route even if a passenger only travels between intermediate stops. 
 
@@ -53,7 +53,7 @@ Passenger 2:                                          [==== Seat 12 ====]  (SEGM
 
 ---
 
-## 🛠️ Challenges Faced & Solutions
+##  Challenges Faced & Solutions
 
 ### 1. The "Ghost Hold" & Expiry Race Condition
 * **Challenge**: When a seat hold expires in Redis, another user might attempt to book the seat at the exact millisecond the original user submits payment.
@@ -81,7 +81,7 @@ Passenger 2:                                          [==== Seat 12 ====]  (SEGM
 
 ---
 
-## ✨ Extra Credit & Advanced Features Implemented
+##  Extra Credit & Advanced Features Implemented
 
 1. **Automated Waitlist Promotion Engine**:
    - Passengers can join a waitlist when a coach/train is fully booked.
@@ -112,32 +112,7 @@ Passenger 2:                                          [==== Seat 12 ====]  (SEGM
 
 ---
 
-## 🔐 Environment Variables & Security
-
-Secrets and credentials are managed via environment variables (never committed to git).
-
-### Backend Environment Variables (`backend/.env`)
-```env
-PORT=8080
-DATABASE_URL=postgres://postgres:postgres@postgres:5432/trainbooking?sslmode=disable
-REDIS_URL=redis:6379
-JWT_SECRET=your-super-secret-jwt-key
-SEAT_HOLD_DURATION_MINUTES=10
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:8080
-```
-
-### Frontend Environment Variables (`frontend/.env`)
-```env
-VITE_API_BASE_URL=http://localhost:8080/api/v1
-VITE_EMAILJS_SERVICE_ID=service_x1z7q8p
-VITE_EMAILJS_PUBLIC_KEY=H8QxTF3eCPdzWhirQ
-VITE_EMAILJS_RECEIPT_TEMPLATE_ID=template_051ybek
-VITE_EMAILJS_STATUS_TEMPLATE_ID=template_051ybek
-```
-
----
-
-## 🚀 Quick Start & Deployment Guide
+##  Quick Start & Deployment Guide
 
 ### Prerequisites
 - [Docker & Docker Compose](https://docs.docker.com/get-docker/) installed.
@@ -154,13 +129,9 @@ docker compose up --build -d
 ### 2. Access Web Applications
 - **Passenger Portal**: `http://localhost:5173`
 - **Admin Portal**: `http://localhost:5173/admin/login`
-  - **Username**: `admin`
-  - **Password**: `admin123`
-- **Backend API Health Check**: `http://localhost:8080/api/v1/health`
-
 ---
 
-## 📡 Core API Specification
+##  Core API Specification
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -175,7 +146,3 @@ docker compose up --build -d
 | `PATCH`| `/api/v1/admin/bookings/{id}/cancel` | Cancel booking & release segment capacity |
 
 ---
-
-## 📄 License & Author
-
-Developed with ❤️ for Sri Lanka Railways modern seat reservation engine.
